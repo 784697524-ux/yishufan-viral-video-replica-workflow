@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="650" viewBox="0 0 1200 650" role="img" aria-labelledby="title desc">
+  <title id="title">艺术范爆款短视频复刻工作流</title>
+  <desc id="desc">历史案例智能检索或新视频证据拉片，汇入创意竞争和 schema v4 复刻合同，再生成逐秒脚本、独立分镜和 Seedance 提示词，最后经过生成前、合片前和发布前三层门禁。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#E2573E"/>
+    </marker>
+    <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#68727E"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="650" rx="28" fill="#F7F1E7"/>
+  <g font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <text x="60" y="62" fill="#16191D" font-size="40" font-weight="800">一条从参考证据走到发布门禁的生产链</text>
+    <text x="60" y="99" fill="#616873" font-size="20">所有结论都能回到案例、时间码、资产哈希或机器可读合同。</text>
+
+    <g id="inputs" transform="translate(60 140)">
+      <rect x="0" y="0" width="310" height="132" rx="18" fill="#FFFFFF" stroke="#59B39A" stroke-width="2"/>
+      <text x="24" y="36" fill="#25816C" font-size="18" font-weight="800">入口 A · 没有参考视频</text>
+      <text x="24" y="73" fill="#16191D" font-size="25" font-weight="800">智能参考历史爆款库</text>
+      <text x="24" y="105" fill="#616873" font-size="18">主对标 · 生产模板 · 失败教训</text>
+
+      <rect x="0" y="166" width="310" height="132" rx="18" fill="#FFFFFF" stroke="#E2573E" stroke-width="2"/>
+      <text x="24" y="202" fill="#B74330" font-size="18" font-weight="800">入口 B · 有新参考视频</text>
+      <text x="24" y="239" fill="#16191D" font-size="25" font-weight="800">真实拉片与双模型 ASR</text>
+      <text x="24" y="271" fill="#616873" font-size="18">0.5s 时间线 · 反转簇 · 时间码</text>
+    </g>
+
+    <path d="M386 206H446V288" fill="none" stroke="#E2573E" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M386 372H446V304" fill="none" stroke="#E2573E" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <g id="creative" transform="translate(452 210)">
+      <rect x="0" y="0" width="300" height="184" rx="22" fill="#16191D"/>
+      <text x="28" y="40" fill="#59B39A" font-size="18" font-weight="800">CREATIVE ROOM</text>
+      <text x="28" y="80" fill="#F7F1E7" font-size="27" font-weight="800">冲突短剧先于商品卖点</text>
+      <text x="28" y="116" fill="#C8CDD3" font-size="19">5 / 10 套方案竞争</text>
+      <text x="28" y="146" fill="#C8CDD3" font-size="19">85 分准入 · 删除商品测试</text>
+    </g>
+
+    <path d="M768 302H820" fill="none" stroke="#E2573E" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <g id="contract" transform="translate(826 210)">
+      <rect x="0" y="0" width="314" height="184" rx="22" fill="#FFFFFF" stroke="#16191D" stroke-width="2"/>
+      <text x="26" y="40" fill="#B74330" font-size="18" font-weight="800">SCHEMA V4 CONTRACT</text>
+      <text x="26" y="81" fill="#16191D" font-size="27" font-weight="800">证据链唯一映射</text>
+      <text x="26" y="120" fill="#16191D" font-size="20" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">R → S → B → P</text>
+      <text x="26" y="151" fill="#616873" font-size="18">产品锁 · 风格锁 · 运动链</text>
+    </g>
+
+    <path d="M983 409V452H170V469" fill="none" stroke="#68727E" stroke-width="3" marker-end="url(#arrow-muted)"/>
+
+    <g id="outputs" transform="translate(60 474)">
+      <rect x="0" y="0" width="220" height="92" rx="16" fill="#FFFFFF" stroke="#C9BFAF"/>
+      <text x="24" y="38" fill="#16191D" font-size="23" font-weight="800">逐秒脚本</text>
+      <text x="24" y="67" fill="#616873" font-size="18">站位 · 动作 · 对白</text>
+
+      <path d="M236 46H276" stroke="#68727E" stroke-width="3" marker-end="url(#arrow-muted)"/>
+      <rect x="292" y="0" width="220" height="92" rx="16" fill="#FFFFFF" stroke="#C9BFAF"/>
+      <text x="316" y="38" fill="#16191D" font-size="23" font-weight="800">独立分镜</text>
+      <text x="316" y="67" fill="#616873" font-size="18">人物 · 产品 · 连续性</text>
+
+      <path d="M528 46H568" stroke="#68727E" stroke-width="3" marker-end="url(#arrow-muted)"/>
+      <rect x="584" y="0" width="220" height="92" rx="16" fill="#FFFFFF" stroke="#C9BFAF"/>
+      <text x="608" y="38" fill="#16191D" font-size="23" font-weight="800">生成提示词</text>
+      <text x="608" y="67" fill="#616873" font-size="18">Seedance 分段执行</text>
+
+      <path d="M820 46H860" stroke="#E2573E" stroke-width="3" marker-end="url(#arrow)"/>
+      <rect x="876" y="0" width="264" height="92" rx="16" fill="#E2573E"/>
+      <text x="1008" y="37" fill="#FFFFFF" font-size="23" font-weight="800" text-anchor="middle">三级质量门禁</text>
+      <text x="1008" y="68" fill="#FFF1EC" font-size="18" text-anchor="middle">生成 → 合片 → 发布</text>
+    </g>
+
+    <g id="footer" transform="translate(60 611)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">
+      <text x="0" y="0" fill="#25816C">LOCAL VECTOR LIBRARY</text>
+      <text x="292" y="0" fill="#616873">41 CASES</text>
+      <text x="436" y="0" fill="#616873">350 DOCUMENTS</text>
+      <text x="626" y="0" fill="#616873">2048 DIMENSIONS</text>
+      <text x="856" y="0" fill="#B74330">67 TESTS PASSED</text>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,47 @@
+[
+  {
+    "name": "qin_overloaded_reversal_clip",
+    "delivery_mode": "dialogue_drama",
+    "allows_magic": false,
+    "product_hook_user_requested": true,
+    "script": "| 时间 | ID | 画面与对白 |\n|---|---|---|\n| 0-2 | S01/P01 | 秦始皇：\"怎么还没办成？\" |\n| 2-4 | S02/P02 | 电视爆炸 |\n| 4-6 | S03/P03 | 兵马俑误判 |\n| 6-8 | S04/P04 | 兵马俑打老板 |\n| 8-11 | S05/P05 | 文件追打 |\n| 11-15 | S06/P06 | 秦始皇：\"这是我新买的电视！\" |\n",
+    "expected_status": "failed",
+    "expected_error": "timed script units"
+  },
+  {
+    "name": "haochi_magic_solves_conflict",
+    "delivery_mode": "dialogue_drama",
+    "allows_magic": false,
+    "product_hook_user_requested": true,
+    "script": "| 时间 | ID | 画面与对白 |\n|---|---|---|\n| 0-3 | S01/P01 | 女主：\"怎么没人来尝？\" |\n| 3-8 | S02/P02 | 券落水后化成发光券印 |\n| 8-15 | S03/P03 | 人群突然出现并领券 |\n",
+    "expected_status": "failed",
+    "expected_error": "unexplained magic"
+  },
+  {
+    "name": "song_product_catalogue_dialogue",
+    "delivery_mode": "dialogue_drama",
+    "allows_magic": false,
+    "product_hook_user_requested": false,
+    "script": "| 时间 | ID | 画面与对白 |\n|---|---|---|\n| 0-3 | S01/P01 | 妹妹：\"凭什么她能嫁到合肥而我不行？\" |\n| 3-6 | S02/P02 | 妹妹：\"九元奶茶、九十五元双人餐。\" |\n| 6-9 | S03/P03 | 妹妹：\"六十九抵一百。\" |\n| 9-12 | S04/P04 | 妹妹：\"还有美容和搏击体验券。\" |\n| 12-15 | S05/P05 | 长姐：\"我终于如愿嫁到合肥了。\" |\n",
+    "expected_status": "failed",
+    "expected_error": "hero fact"
+  },
+  {
+    "name": "luan_too_many_spoken_turns",
+    "delivery_mode": "dialogue_drama",
+    "allows_magic": false,
+    "product_hook_user_requested": true,
+    "script": "| 时间 | ID | 画面与对白 |\n|---|---|---|\n| 0-4 | S01/P01 | 女友：\"你又说随便？\" |\n| 4-8 | S02/P02 | 男友：\"三样都安排。\" |\n| 8-11 | S03/P03 | 女友：\"还有饮品？\" |\n| 11-15 | S03/P03 | 男友：\"娱乐体验也有。\" |\n",
+    "expected_status": "failed",
+    "expected_error": "spoken turns"
+  },
+  {
+    "name": "poetic_narration_with_breathing_room",
+    "delivery_mode": "poetic_narration",
+    "allows_magic": false,
+    "product_hook_user_requested": true,
+    "script": "| 时间 | ID | 画面与旁白 |\n|---|---|---|\n| 0-3 | S01/P01 | 旁白：\"云淡风轻入画桥。\" |\n| 3-6 | S02/P02 | 旁白：\"双影相携赴今朝。\" |\n| 6-10 | S03/P03 | 旁白：\"滨湖风物好，银泰待相邀。\" |\n",
+    "expected_status": "ok",
+    "expected_error": null
+  }
+]

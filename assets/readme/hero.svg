@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title desc">
+  <title id="title">艺术范爆款短视频复刻工作流 v6.1</title>
+  <desc id="desc">从历史案例向量检索或新视频真实拉片出发，经过证据链、脚本、分镜和质量门禁形成可验证的短视频复刻方案。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#E2573E"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="400" rx="28" fill="#0D0F12"/>
+  <path d="M0 344H1200" stroke="#2B3037" stroke-width="1"/>
+  <path d="M752 0V344" stroke="#2B3037" stroke-width="1"/>
+
+  <g id="title-block" transform="translate(58 48)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <text x="0" y="0" fill="#59B39A" font-size="18" font-weight="700" letter-spacing="3">EVIDENCE-FIRST · AI VIDEO WORKFLOW</text>
+    <text x="0" y="72" fill="#F7F1E7" font-size="56" font-weight="800">艺术范爆款短视频复刻</text>
+    <text x="0" y="124" fill="#E2573E" font-size="30" font-weight="750">历史案例库 × 新视频拉片 × 双模型 ASR</text>
+    <text x="0" y="178" fill="#C8CDD3" font-size="22">先找到传播机制，再写冲突短剧；</text>
+    <text x="0" y="211" fill="#C8CDD3" font-size="22">用可追溯合同连接脚本、分镜与生成提示词。</text>
+
+    <g transform="translate(0 247)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="18">
+      <rect x="0" y="0" width="110" height="36" rx="18" fill="#20242A"/>
+      <text x="55" y="24" fill="#F7F1E7" text-anchor="middle">v6.1</text>
+      <rect x="124" y="0" width="152" height="36" rx="18" fill="#20242A"/>
+      <text x="200" y="24" fill="#F7F1E7" text-anchor="middle">41 CASES</text>
+      <rect x="290" y="0" width="178" height="36" rx="18" fill="#20242A"/>
+      <text x="379" y="24" fill="#F7F1E7" text-anchor="middle">350 DOCS</text>
+      <rect x="482" y="0" width="178" height="36" rx="18" fill="#20242A"/>
+      <text x="571" y="24" fill="#F7F1E7" text-anchor="middle">67 TESTS ✓</text>
+    </g>
+  </g>
+
+  <g id="project-proof" transform="translate(786 42)" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif">
+    <rect x="0" y="0" width="356" height="270" rx="22" fill="#15191E" stroke="#3B424B"/>
+    <text x="24" y="38" fill="#8F98A3" font-size="18" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">TWO INPUTS · ONE CONTRACT</text>
+
+    <g transform="translate(24 64)">
+      <rect x="0" y="0" width="144" height="66" rx="12" fill="#20262C" stroke="#59B39A"/>
+      <circle cx="22" cy="21" r="6" fill="#59B39A"/>
+      <circle cx="42" cy="34" r="6" fill="#59B39A"/>
+      <circle cx="22" cy="47" r="6" fill="#59B39A"/>
+      <path d="M27 23L37 31M27 44L37 36" stroke="#59B39A" stroke-width="2"/>
+      <text x="57" y="28" fill="#F7F1E7" font-size="20" font-weight="700">历史案例</text>
+      <text x="57" y="51" fill="#AAB1B9" font-size="17">向量检索</text>
+    </g>
+
+    <g transform="translate(188 64)">
+      <rect x="0" y="0" width="144" height="66" rx="12" fill="#20262C" stroke="#E2573E"/>
+      <rect x="18" y="15" width="31" height="38" rx="4" fill="none" stroke="#E2573E" stroke-width="2"/>
+      <path d="M24 22H43M24 31H43M24 40H43M24 49H43" stroke="#E2573E" stroke-width="2"/>
+      <text x="61" y="28" fill="#F7F1E7" font-size="20" font-weight="700">新视频</text>
+      <text x="61" y="51" fill="#AAB1B9" font-size="17">拉片 + ASR</text>
+    </g>
+
+    <path d="M96 143C96 169 178 160 178 188" fill="none" stroke="#E2573E" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M260 143C260 169 178 160 178 188" fill="none" stroke="#E2573E" stroke-width="3" marker-end="url(#arrow)"/>
+
+    <rect x="61" y="196" width="234" height="49" rx="12" fill="#E2573E"/>
+    <text x="178" y="228" fill="#0D0F12" font-size="21" font-weight="800" text-anchor="middle">schema v4 复刻合同</text>
+  </g>
+
+  <g id="evidence-chain" transform="translate(58 365)" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="19" font-weight="700">
+    <text x="0" y="0" fill="#F7F1E7">R01 证据</text>
+    <text x="130" y="0" fill="#E2573E">→</text>
+    <text x="170" y="0" fill="#F7F1E7">S01 脚本</text>
+    <text x="300" y="0" fill="#E2573E">→</text>
+    <text x="340" y="0" fill="#F7F1E7">B01 分镜</text>
+    <text x="470" y="0" fill="#E2573E">→</text>
+    <text x="510" y="0" fill="#F7F1E7">P01 提示词</text>
+    <text x="690" y="0" fill="#5F6873">│</text>
+    <text x="730" y="0" fill="#59B39A">GENERATION</text>
+    <text x="880" y="0" fill="#5F6873">→</text>
+    <text x="920" y="0" fill="#59B39A">STITCH</text>
+    <text x="1020" y="0" fill="#5F6873">→</text>
+    <text x="1060" y="0" fill="#59B39A">PUBLISH</text>
+  </g>
+</svg>
+

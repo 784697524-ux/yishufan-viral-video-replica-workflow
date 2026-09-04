@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "vector_model": "local-hash-zh-2048",
+  "portable": true,
+  "workspace": "<PORTABLE_SOURCE>",
+  "index": "index.sqlite3",
+  "case_count": 41,
+  "document_count": 350,
+  "workspace_case_count": 41,
+  "chat_case_count": 0,
+  "seed_case_count": 0,
+  "seed_document_count": 0,
+  "blocked_case_count": 2
+}
