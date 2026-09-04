@@ -52,17 +52,19 @@ Rxx 原片节拍 → Sxx 新片脚本 → Bxx 分镜 → Pxx 生成提示词
 
 ### 三条成片示意
 
-<p align="center">
-  <a href="./examples/final-videos/hefei-yintai-center-drama-15s.mp4"><img src="./assets/readme/final-video-previews/hefei-yintai-center.jpg" width="30%" alt="合肥银泰中心剧情示意，15 秒竖版成片预览"></a>
-  <a href="./examples/final-videos/qujiang-yintai-beauty-rescue-30s.mp4"><img src="./assets/readme/final-video-previews/qujiang-yintai-beauty.jpg" width="30%" alt="曲江银泰美妆示意，30 秒竖版成片预览"></a>
-  <a href="./examples/final-videos/hefei-yintai-six-nations-dining-37s.mp4"><img src="./assets/readme/final-video-previews/hefei-yintai-one-yuan.jpg" width="30%" alt="合肥银泰一元请六国吃饭，37 秒竖版成片预览"></a>
-</p>
+#### 合肥银泰中心剧情示意（15.1 秒）
 
-<p align="center">
-  <sub>点击预览图可打开原始 MP4 的 GitHub 文件页：支持相应编解码器的浏览器可播放，其他环境可下载。合肥银泰中心剧情示意（15.1 秒） · 曲江银泰美妆示意（30.3 秒） · 合肥银泰一元请六国吃饭（37.2 秒）</sub>
-</p>
+https://github.com/user-attachments/assets/cb8d828f-9289-4799-abb1-efbca9d052f7
 
-三条文件均为可校验的竖版成片，编码、时长与 SHA-256 见 [成片示意清单](./examples/final-videos/)。它们展示最终可播放的视觉效果，不替代质量门禁，也不附带投放数据或“爆款”保证。
+#### 曲江银泰美妆示意（30.3 秒）
+
+https://github.com/user-attachments/assets/374e3986-6e76-4e10-a48c-ffa38c77d10b
+
+#### 合肥银泰一元请六国吃饭（37.2 秒）
+
+https://github.com/user-attachments/assets/2b96de9b-346a-4b48-a9f7-b4fe9acacd6f
+
+三条附件在 GitHub README 内可直接点击播放；同时保留了可下载、可校验的 [原始 MP4 文件](./examples/final-videos/)，其中列出了编码、时长与 SHA-256。它们展示最终可播放的视觉效果，不替代质量门禁，也不附带投放数据或“爆款”保证。
 
 ### 完整拉片案例：从参考视频到逐秒脚本与分镜
 
