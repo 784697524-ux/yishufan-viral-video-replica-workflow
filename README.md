@@ -48,6 +48,43 @@ Rxx 原片节拍 → Sxx 新片脚本 → Bxx 分镜 → Pxx 生成提示词
   <img src="./assets/readme/workflow.svg" width="100%" alt="艺术范工作流：历史向量检索或新视频拉片汇入创意室、故事合同、脚本分镜和三级质量门禁">
 </p>
 
+## 看得到的结果
+
+### 三条成片示意
+
+<p align="center">
+  <a href="./examples/final-videos/hefei-yintai-center-drama-15s.mp4"><img src="./assets/readme/final-video-previews/hefei-yintai-center.jpg" width="30%" alt="合肥银泰中心剧情示意，15 秒竖版成片预览"></a>
+  <a href="./examples/final-videos/qujiang-yintai-beauty-rescue-30s.mp4"><img src="./assets/readme/final-video-previews/qujiang-yintai-beauty.jpg" width="30%" alt="曲江银泰美妆示意，30 秒竖版成片预览"></a>
+  <a href="./examples/final-videos/hefei-yintai-six-nations-dining-37s.mp4"><img src="./assets/readme/final-video-previews/hefei-yintai-one-yuan.jpg" width="30%" alt="合肥银泰一元请六国吃饭，37 秒竖版成片预览"></a>
+</p>
+
+<p align="center">
+  <sub>点击预览图可打开原始 MP4 的 GitHub 文件页：支持相应编解码器的浏览器可播放，其他环境可下载。合肥银泰中心剧情示意（15.1 秒） · 曲江银泰美妆示意（30.3 秒） · 合肥银泰一元请六国吃饭（37.2 秒）</sub>
+</p>
+
+三条文件均为可校验的竖版成片，编码、时长与 SHA-256 见 [成片示意清单](./examples/final-videos/)。它们展示最终可播放的视觉效果，不替代质量门禁，也不附带投放数据或“爆款”保证。
+
+### 完整拉片案例：从参考视频到逐秒脚本与分镜
+
+下面不是概念图，而是一份已完成的真实案例存档：将 18.067 秒的《眼儿媚》古风参考片，按“爆款机制迁移”改写为 30 秒、3 个 Clip、9 个新节拍、11 张独立分镜的生成设计包。
+
+<p align="center">
+  <img src="./examples/eyeermei-hefei-binhuhu-20260826/reference-analysis/full_keyframes.png" width="100%" alt="眼儿媚参考片关键帧拼图，用于真实拉片分析">
+</p>
+
+<p align="center">
+  <img src="./examples/eyeermei-hefei-binhuhu-20260826/storyboard_overview.png" width="48%" alt="眼儿媚案例的 11 张生成分镜总览">
+</p>
+
+| 证据链环节 | 可直接查看的真实交付物 |
+|---|---|
+| 拉片与 ASR | [关键帧、审看范围与镜头分析](./examples/eyeermei-hefei-binhuhu-20260826/reference_analysis.md)；[双模型字幕差异](./examples/eyeermei-hefei-binhuhu-20260826/asr_evidence.md) |
+| 机制迁移 | [R01–R09 → S01–S09 的结构映射](./examples/eyeermei-hefei-binhuhu-20260826/structure_mapping.md) |
+| 逐秒可拍脚本 | [3 个 10 秒 Clip 的站位、动作、视线、旁白与转场](./examples/eyeermei-hefei-binhuhu-20260826/script.md) |
+| 图像与视频生成准备 | [11 张独立分镜](./examples/eyeermei-hefei-binhuhu-20260826/storyboard/)；[分段 Seedance 提示词](./examples/eyeermei-hefei-binhuhu-20260826/seedance_prompts.md) |
+
+该案例清楚区分“已经交付的分析、脚本、分镜和提示词”与“最终视频”。案例本身不包含最终渲染 MP4，且当时的机器化生成前门禁未通过；继续生成前必须按当前版本重新过门禁。完整说明在 [案例首页](./examples/eyeermei-hefei-binhuhu-20260826/)。
+
 ## 核心能力
 
 ### 1. 安装即用的历史爆款向量案例库
@@ -106,6 +143,38 @@ R01 原片证据 → S01 新片脚本 → B01 分镜文件 → P01 Seedance 段�
 | 发布前 | `allow_publish` | 最终 MP4 参数/哈希不符、双模型 ASR 未复核、事实卡不一致 |
 
 没有通过对应门禁，只能称为“生成结果”，不能称为“可合片”或“可发布”。
+
+## 阿里云百炼：在本地启用语音识别与字幕
+
+新视频拉片的语音识别使用你自己的阿里云百炼（DashScope/Bailian）账户；该仓库不会附带 API Key，也不会把密钥写进项目文件。
+
+1. 在阿里云百炼控制台开通语音识别能力，创建自己的 API Key；从控制台复制与你账号服务入口相匹配的 DashScope Endpoint。不要把 Key 粘进 README、脚本或 shell 历史。
+2. 安装 Skill 后运行下面的配置命令。程序会以隐藏输入方式询问 `DASHSCOPE_API_KEY`，并写入仅当前用户可读的 `~/.config/watch/.env`（权限 `600`）。
+
+```bash
+SKILL_DIR="$HOME/.codex/skills/yishufan-viral-video-replica-workflow"
+
+python3 "$SKILL_DIR/scripts/configure_asr.py" \
+  --endpoint "<从阿里云百炼控制台复制的 DashScope Endpoint>" \
+  --models "paraformer-v2,paraformer-v1"
+```
+
+3. 用不显示密钥的检查确认配置是否可用：
+
+```bash
+python3 "$SKILL_DIR/scripts/configure_asr.py" --check
+```
+
+默认会并行保留 `paraformer-v2` 与 `paraformer-v1` 的带时间码转写（SRT/JSON）。两者不一致时，工作流只标记“需复核”，再结合可见字幕、口型与画面判断；它不会把模型误识别、歌词或画外音伪装成角色对白。
+
+| 生产环节 | 使用的工具或模型 | 何时需要 |
+|---|---|---|
+| 视频身份、抽帧与时间线 | 本地 `ffmpeg`、`ffprobe`、`yt-dlp` 与内置 Watch 后端 | 新视频拉片 |
+| 字幕与语音证据 | 阿里云百炼 Paraformer `v2` + `v1` | 需要 ASR 的新视频 |
+| 人物设定与独立分镜 | 当前 Codex 环境的图像生成能力 | 进入视觉预制时 |
+| 运动短片 | 以 Seedance 分段提示词为例的可用视频模型 | 通过生成前门禁后 |
+
+外部模型的账户、权限、额度与费用由使用者自行管理；Skill 交付的是可审计的证据、脚本、分镜、提示词和门禁，不承诺某一第三方模型必然可用。
 
 ## 30 秒安装
 
@@ -179,7 +248,7 @@ python3 "$SKILL_DIR/vendor/watch/scripts/setup.py" --json
 python3 "$SKILL_DIR/scripts/configure_asr.py" --check
 ```
 
-拉片后端需要 `ffmpeg`、`ffprobe` 和 `yt-dlp`。字幕识别需要用户自己的阿里云 DashScope/Bailian Key；密钥通过隐藏输入配置，不应写进命令行、仓库或报告。
+拉片后端需要 `ffmpeg`、`ffprobe` 和 `yt-dlp`。字幕识别的完整配置、模型说明与安全边界见上方“阿里云百炼：在本地启用语音识别与字幕”。
 
 ## 三种复刻模式
 
@@ -251,6 +320,9 @@ python3 "$SKILL_DIR/scripts/viral_library.py" build \
 .
 ├── README.md
 ├── assets/readme/                         README 视觉资产
+├── examples/                              已核验案例与成片示意
+│   ├── eyeermei-hefei-binhuhu-20260826/    拉片→脚本→分镜→提示词案例
+│   └── final-videos/                       三条可播放的竖版 MP4
 └── skills/yishufan-viral-video-replica-workflow/
     ├── SKILL.md                           Codex 工作流入口
     ├── knowledge_base/index.sqlite3       内置向量案例库
@@ -278,4 +350,3 @@ sqlite3 knowledge_base/index.sqlite3 "PRAGMA integrity_check;"
 - [复刻合同 schema v4](./skills/yishufan-viral-video-replica-workflow/references/replica_contract_schema.md)
 - [质量门禁清单](./skills/yishufan-viral-video-replica-workflow/references/quality_gate_manifests.md)
 - [历史案例目录](./skills/yishufan-viral-video-replica-workflow/knowledge_base/catalog.md)
-
