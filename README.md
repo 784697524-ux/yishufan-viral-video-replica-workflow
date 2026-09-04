@@ -11,6 +11,10 @@
   <code>v6.1</code> · <code>41 个正式案例</code> · <code>350 份案例文档</code> · <code>2048 维本地向量</code> · <code>67 项测试</code>
 </p>
 
+<p align="center">
+  <a href="#看得到的结果">先看成片</a> · <a href="#30-秒安装">安装 Skill</a> · <a href="#第一次使用">开始拉片</a> · <a href="#联系与支持">联系与支持</a>
+</p>
+
 ## 它解决什么问题
 
 拿到一张商品图、一个团购卡券，或者一条想复刻的视频时，最难的通常不是“让模型生成画面”，而是：
@@ -352,3 +356,31 @@ sqlite3 knowledge_base/index.sqlite3 "PRAGMA integrity_check;"
 - [复刻合同 schema v4](./skills/yishufan-viral-video-replica-workflow/references/replica_contract_schema.md)
 - [质量门禁清单](./skills/yishufan-viral-video-replica-workflow/references/quality_gate_manifests.md)
 - [历史案例目录](./skills/yishufan-viral-video-replica-workflow/knowledge_base/catalog.md)
+
+---
+
+## 联系与支持
+
+<p align="center">
+  <strong>想交流案例、共创项目或了解这套工作流如何落地，欢迎扫码添加微信。</strong>
+</p>
+
+<p align="center">
+  <img src="./assets/readme/contact/wechat-contact.jpg" width="360" alt="李凯的微信联系二维码，扫码可添加微信">
+</p>
+
+<p align="center">
+  <sub>微信联系 · 李凯 · 浙江杭州</sub>
+</p>
+
+<p align="center">
+  <strong>如果这个 Skill 对你有帮助，也欢迎请我喝杯咖啡。</strong>
+</p>
+
+<p align="center">
+  <img src="./assets/readme/contact/support-code.jpg" width="360" alt="李凯的赞赏码，支持技术小哥喝杯咖啡">
+</p>
+
+<p align="center">
+  <sub>赞赏完全自愿，感谢每一份支持。</sub>
+</p>
