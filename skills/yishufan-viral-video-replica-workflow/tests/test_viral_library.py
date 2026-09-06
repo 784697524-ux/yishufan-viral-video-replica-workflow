@@ -41,6 +41,17 @@ class ViralLibraryTest(unittest.TestCase):
             "source_path": "/missing/reference.mp4",
             "sha256": "a" * 64,
         }), encoding="utf-8")
+        (good / "07_quality_gate.json").write_text(json.dumps({
+            "status": "ok", "stage": "pre-stitch", "decision": "allow_stitch",
+            "results": {
+                "delivery": {"status": "ok", "outputs": [{
+                    "clip_id": "clip01", "file": "renders/clip01.mp4", "duration_seconds": 15,
+                    "width": 720, "height": 1280, "has_audio": True,
+                }]},
+                "director": {"status": "ok", "errors": []},
+                "transcript": {"status": "ok", "errors": []},
+            },
+        }), encoding="utf-8")
 
         failed = self.outputs / "失败_名画求爱"
         failed.mkdir()
@@ -104,9 +115,15 @@ class ViralLibraryTest(unittest.TestCase):
 
     def test_portable_build_omits_chats_and_redacts_local_data(self):
         (self.good / "04_script.md").write_text(
-            "爆款脚本参考 /Users/alice/Desktop/private.mp4，联系 test@example.com，fileToken=abcdef123456。",
+            "爆款脚本参考 /Users/alice/Desktop/private.mp4，联系 test@example.com，"
+            "fileToken=abcdef123456。提示词字段 `AbC12xY` 必须保护。",
             encoding="utf-8",
         )
+        (self.good / "08_replica_contract.json").write_text(json.dumps({
+            "project": "艺术范爆款短视频",
+            "profile": "ding0123456789abcdef0123456789abcdef:user1234",
+            "protected_field_ids": ["AbC12xY", "DeF34zQ"],
+        }), encoding="utf-8")
         summary = MODULE.build_library(
             self.workspace, self.library, self.chat_root, False, portable=True
         )
@@ -128,12 +145,52 @@ class ViralLibraryTest(unittest.TestCase):
         self.assertNotIn("/Users/", all_text)
         self.assertNotIn("test@example.com", all_text)
         self.assertNotIn("abcdef123456", all_text)
+        self.assertNotIn("ding0123456789abcdef0123456789abcdef", all_text)
+        self.assertNotIn("AbC12xY", all_text)
+        self.assertNotIn("DeF34zQ", all_text)
         self.assertIn("[REDACTED]", all_text)
         self.assertNotIn(str(self.workspace), (self.library / "catalog.json").read_text(encoding="utf-8"))
         result = MODULE.search_library(
             self.library / "index.sqlite3", "双人权益卡名画求爱礼物反转", 5
         )
         self.assertIsNotNone(result["production_template"])
+
+    def test_portable_build_resanitizes_legacy_seed_identifiers(self):
+        (self.good / "08_replica_contract.json").write_text(json.dumps({
+            "project": "艺术范爆款短视频",
+            "profile": "ding0123456789abcdef0123456789abcdef:user1234",
+            "write_field_ids": ["AbC12xY", "DeF34zQ"],
+        }), encoding="utf-8")
+        (self.good / "04_script.md").write_text(
+            "爆款视频字段 AbC12xY 与 DeF34zQ 属于本地 AI 表。", encoding="utf-8"
+        )
+        legacy_seed = Path(self.temp.name) / "legacy-seed"
+        MODULE.build_library(self.workspace, legacy_seed, self.chat_root, False)
+
+        empty_workspace = Path(self.temp.name) / "empty-workspace"
+        (empty_workspace / "outputs").mkdir(parents=True)
+        portable_library = Path(self.temp.name) / "portable-seed"
+        MODULE.build_library(
+            empty_workspace,
+            portable_library,
+            self.chat_root,
+            False,
+            seed_index=legacy_seed / "index.sqlite3",
+            portable=True,
+        )
+        connection = sqlite3.connect(portable_library / "index.sqlite3")
+        try:
+            all_text = "\n".join(row[0] for row in connection.execute("SELECT text FROM documents"))
+            case_rows = list(connection.execute(
+                "SELECT root_path,source_video_available,source_kind FROM cases"
+            ))
+        finally:
+            connection.close()
+        self.assertNotIn("ding0123456789abcdef0123456789abcdef", all_text)
+        self.assertNotIn("AbC12xY", all_text)
+        self.assertNotIn("DeF34zQ", all_text)
+        self.assertTrue(all(row[0].startswith("case://") for row in case_rows))
+        self.assertTrue(all(row[1] == 0 and row[2] == "seed_case" for row in case_rows))
 
     def test_local_build_merges_seed_and_new_cases(self):
         seed_dir = Path(self.temp.name) / "seed"

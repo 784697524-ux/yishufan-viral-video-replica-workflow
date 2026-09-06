@@ -82,3 +82,6 @@
 - 可选清单记录源文件哈希、起止时间、输出哈希和实际时长。
 
 它截取的是原片单一混音轨，可能同时包含音乐、对白和音效，不做声部分离。
+# v5路由提示
+
+真实视频继续遵守下述抽帧/ASR契约；静态插画按[creative_direction_v5.md](creative_direction_v5.md)的逐图哈希与观察路由，无原视频时间线和ASR。`run_quality_gate.py --stage pre-visual`只允许校准生图；写生产表仍必须取得pre-generation的allow_generation。旧schema3/4只允许`--audit-legacy`审计。

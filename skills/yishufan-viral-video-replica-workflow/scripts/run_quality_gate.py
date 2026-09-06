@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -13,8 +14,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import analyze_script  # noqa: E402
+import validate_creative  # noqa: E402
 import validate_delivery  # noqa: E402
 import validate_director_qc  # noqa: E402
+import validate_director_core  # noqa: E402
 import validate_final_render  # noqa: E402
 import validate_package  # noqa: E402
 import validate_transcript  # noqa: E402
@@ -22,6 +25,10 @@ import validate_transcript  # noqa: E402
 
 def return_stage(errors: list[str]) -> str:
     text = "\n".join(errors).lower()
+    if any(term in text for term in ("director_core", "state discontinuity", "duplicate payoff owners")):
+        return "director_plan"
+    if "creative_review" in text:
+        return "style_calibration" if any(word in text for word in ("style", "proof", "source_axes")) else "creative_room"
     if any(term in text for term in ("brief_alignment", "user confirmation", "requested_mode", "target duration changed")):
         return "brief"
     if any(term in text for term in ("visual_lock", "product_identity", "visual_style", "product reference asset")):
@@ -69,12 +76,14 @@ def run_gate(
     director_manifest: Path | None = None,
     final_manifest: Path | None = None,
     render_validation: Path | None = None,
+    audit_legacy: bool = False,
 ) -> dict:
     project = project.expanduser().resolve()
     try:
         contract = read_json(project / validate_package.CONTRACT_FILE)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         decision = {
+            "pre-visual": "block_visual_tests",
             "pre-generation": "block_generation",
             "pre-stitch": "block_stitch",
             "pre-publish": "block_publish",
@@ -89,11 +98,24 @@ def run_gate(
             "errors": [f"contract: {exc}"],
         }
     results: dict[str, dict] = {}
-    for name, function in (("package", validate_package.validate), ("screenplay", analyze_script.analyze)):
+    for name, function in (("package", lambda p: validate_package.validate(p, stage=stage)), ("screenplay", analyze_script.analyze)):
         try:
             results[name] = function(project)
         except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
             results[name] = failed_result(exc)
+    if contract.get("schema_version") != 5:
+        if not audit_legacy:
+            results["production_schema"] = failed_result("new production requires schema_version=5; --audit-legacy grants no production permission")
+    else:
+        try:
+            results["creative"] = validate_creative.validate(project, contract, stage)
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            results["creative"] = failed_result(exc)
+        if contract.get("director_core_version") == "7.3":
+            try:
+                results["director_core"] = validate_director_core.validate(project, contract)
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                results["director_core"] = failed_result(exc)
     errors = [
         f"{name}: {error}"
         for name, result in results.items()
@@ -101,6 +123,7 @@ def run_gate(
     ]
 
     director_data: dict = {}
+    outputs: list = []
     if stage in {"pre-stitch", "pre-publish"}:
         required_paths = {
             "delivery_manifest": delivery_manifest,
@@ -127,6 +150,12 @@ def run_gate(
             try:
                 director_data = read_json(director_manifest)
                 results["director"] = validate_director_qc.validate_director_qc(project, contract, director_data)
+                if contract.get("schema_version") == 5:
+                    delivery_files = {item.get("clip_id"): Path(item.get("file", "")).resolve() for item in outputs}
+                    for review in director_data.get("timeline_reviews", []):
+                        reviewed = (project / str(review.get("video_file", ""))).resolve()
+                        if reviewed != delivery_files.get(review.get("clip_id")):
+                            results["director"].setdefault("errors", []).append("director timeline video must match the actual delivery file for its clip_id")
             except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
                 results["director"] = failed_result(exc)
         for name in ("delivery", "transcript", "director"):
@@ -161,14 +190,35 @@ def run_gate(
 
     allowed = not errors
     decisions = {
+        "pre-visual": ("allow_visual_tests", "block_visual_tests"),
         "pre-generation": ("allow_generation", "block_generation"),
         "pre-stitch": ("allow_stitch", "block_stitch"),
         "pre-publish": ("allow_publish", "block_publish"),
     }
+    bound_inputs = {validate_package.CONTRACT_FILE: validate_creative.digest(project / validate_package.CONTRACT_FILE)}
+    def bind_paths(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                bind_paths(item)
+        elif isinstance(value, list):
+            for item in value:
+                bind_paths(item)
+        elif isinstance(value, str) and len(value) < 1000 and "\n" not in value:
+            candidate = (project / value).resolve()
+            try:
+                if candidate.is_relative_to(project) and candidate.is_file():
+                    bound_inputs[str(candidate.relative_to(project))] = validate_creative.digest(candidate)
+            except OSError:
+                pass
+    bind_paths(contract)
+    bound_inputs.update(results.get("creative", {}).get("bound_inputs", {}))
     return {
         "status": "ok" if allowed else "failed",
         "stage": stage,
-        "decision": decisions[stage][0] if allowed else decisions[stage][1],
+        "decision": "audit_only" if audit_legacy and allowed else decisions[stage][0] if allowed else decisions[stage][1],
+        "production_authorized": allowed and not audit_legacy and stage != "pre-visual",
+        "input_fingerprint": hashlib.sha256(json.dumps(bound_inputs, sort_keys=True).encode()).hexdigest(),
+        "bound_inputs": bound_inputs,
         "return_to_stage": None if allowed else return_stage(errors),
         "project": str(project),
         "results": results,
@@ -179,7 +229,8 @@ def run_gate(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the full viral-replica quality gate.")
     parser.add_argument("project")
-    parser.add_argument("--stage", choices=("pre-generation", "pre-stitch", "pre-publish"), required=True)
+    parser.add_argument("--stage", choices=("pre-visual", "pre-generation", "pre-stitch", "pre-publish"), required=True)
+    parser.add_argument("--audit-legacy", action="store_true", help="Read-only historical audit; never grants production permission")
     parser.add_argument("--delivery-manifest")
     parser.add_argument("--asr-manifest")
     parser.add_argument("--director-manifest")
@@ -195,6 +246,7 @@ def main() -> int:
         director_manifest=Path(args.director_manifest) if args.director_manifest else None,
         final_manifest=Path(args.final_manifest) if args.final_manifest else None,
         render_validation=Path(args.render_validation) if args.render_validation else None,
+        audit_legacy=args.audit_legacy,
     )
     output = json.dumps(result, ensure_ascii=False, indent=2)
     if args.out:

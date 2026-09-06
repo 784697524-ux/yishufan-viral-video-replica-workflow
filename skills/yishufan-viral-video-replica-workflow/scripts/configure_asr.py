@@ -68,8 +68,10 @@ def main() -> int:
     path = args.config.expanduser().resolve()
     values = read_values(path)
     if args.check:
+        keys = ("DASHSCOPE_API_KEY", "DASHSCOPE_ENDPOINT", "DASHSCOPE_ASR_MODELS")
+        values = {key: os.environ.get(key) or values.get(key) for key in keys}
         print(f"config={path}")
-        for key in ("DASHSCOPE_API_KEY", "DASHSCOPE_ENDPOINT", "DASHSCOPE_ASR_MODELS"):
+        for key in keys:
             print(f"{key}: configured={bool(values.get(key))}")
         return 0 if all(values.get(key) for key in ("DASHSCOPE_API_KEY", "DASHSCOPE_ENDPOINT")) else 2
 

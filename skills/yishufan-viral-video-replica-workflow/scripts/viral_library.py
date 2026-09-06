@@ -36,11 +36,13 @@ SKIP_CHAT_PREFIXES = (
 
 TAXONOMY = {
     "名画油画": ("名画", "油画", "画中", "蒙娜丽莎", "梵高", "伦勃朗", "古典绘画"),
-    "东方古装": ("古装", "宋韵", "唐俑", "秦始皇", "周瑜", "小乔", "天宫", "仙侠", "古代"),
+    "东方古装": ("古装", "古街", "古镇", "古风", "宋韵", "唐俑", "秦始皇", "周瑜", "小乔", "天宫", "仙侠", "古代"),
+    "手绘插画": ("手绘", "插画", "青绿", "平涂", "水彩", "水墨"),
     "历史CG": ("历史cg", "历史", "秦始皇", "兵马俑", "帝王"),
     "盗墓奇幻": ("盗墓", "盗笔", "古墓", "墓室"),
     "奇幻冒险": ("奇幻", "冒险", "闯关", "幻境"),
-    "现代商场": ("商场", "银泰", "百货", "购物中心", "逛吃"),
+    "现代商场": ("现代商场", "现代购物中心", "现代百货", "实景商场"),
+    "商业场所": ("银泰", "百货", "商场", "购物中心", "逛吃"),
     "聊天体": ("微信", "聊天记录", "群聊", "对话框"),
     "情侣约会": ("情侣", "约会", "求爱", "告白", "追求", "双人", "恋爱"),
     "竞争关系": ("竞争", "擂台", "对手", "争夺", "二选一", "抢"),
@@ -69,9 +71,12 @@ TAXONOMY = {
 
 TAG_GROUPS = (
     {"名画油画", "东方古装", "历史CG", "盗墓奇幻", "奇幻冒险", "现代商场", "聊天体"},
+    {"手绘插画"},
     {"情侣约会", "竞争关系", "闺蜜群像", "亲子家庭", "职场权力"},
     {"双人餐饮", "观影娱乐", "饮品奶茶", "美妆护理", "综合权益卡", "低价反差"},
 )
+SUCCESS_LEVELS = {"allow_generation", "allow_stitch", "allow_publish"}
+OUTPUT_SUCCESS_LEVELS = {"allow_stitch", "allow_publish"}
 
 SECRET_PATTERNS = (
     re.compile(r"\b(?:gsk|sk)[_-][A-Za-z0-9_-]{12,}\b"),
@@ -80,6 +85,16 @@ SECRET_PATTERNS = (
 PORTABLE_ID_PATTERN = re.compile(
     r"(?i)([\"']?(?:file[_ -]?token|app[_ -]?token|access[_ -]?token|base[_ -]?id|"
     r"table[_ -]?id|record[_ -]?id|field[_ -]?id)[\"']?\s*[:=]\s*[\"']?)([A-Za-z0-9_-]{6,})"
+)
+PORTABLE_ID_LIST_PATTERN = re.compile(
+    r"(?is)[\"']?[A-Za-z0-9_-]*field[_ -]?ids[\"']?\s*[:=]\s*\[(.*?)\]"
+)
+PORTABLE_DING_ID_PATTERN = re.compile(r"\bding[a-z0-9]{16,}(?::[a-z0-9_-]{4,})?\b", re.I)
+PORTABLE_FIELD_CONTEXT_PATTERN = re.compile(r"(?i)(?:字段|field(?:[_ -]?ids?)?)[^。\n]{0,160}")
+PORTABLE_SHORT_ID_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_-])(?=[A-Za-z0-9_-]{6,16}(?![A-Za-z0-9_-]))"
+    r"(?=[A-Za-z0-9_-]*[A-Z])(?=[A-Za-z0-9_-]*[a-z])(?=[A-Za-z0-9_-]*\d)"
+    r"[A-Za-z0-9_-]{6,16}"
 )
 EMAIL_PATTERN = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)
 
@@ -90,13 +105,28 @@ def redact(text: str) -> str:
     return text
 
 
-def portable_text(text: str) -> str:
+def portable_ids(texts: list[str]) -> set[str]:
+    identifiers: set[str] = set()
+    for text in texts:
+        identifiers.update(match.group(2) for match in PORTABLE_ID_PATTERN.finditer(text))
+        identifiers.update(PORTABLE_DING_ID_PATTERN.findall(text))
+        for match in PORTABLE_ID_LIST_PATTERN.finditer(text):
+            identifiers.update(re.findall(r"[\"'`]([A-Za-z0-9_-]{6,})[\"'`]", match.group(1)))
+        for match in PORTABLE_FIELD_CONTEXT_PATTERN.finditer(text):
+            identifiers.update(PORTABLE_SHORT_ID_PATTERN.findall(match.group(0)))
+    return identifiers
+
+
+def portable_text(text: str, identifiers: set[str] | None = None) -> str:
     text = redact(text)
     text = re.sub(r"/Users/[^/\s]+", "<USER_HOME>", text)
     text = re.sub(r"/home/[^/\s]+", "<USER_HOME>", text)
     text = re.sub(r"[A-Za-z]:\\Users\\[^\\\s]+", "<USER_HOME>", text)
     text = text.replace("/Users/", "<USER_HOME>/").replace("/home/", "<USER_HOME>/")
     text = PORTABLE_ID_PATTERN.sub(r"\1[REDACTED]", text)
+    text = PORTABLE_DING_ID_PATTERN.sub("[REDACTED]", text)
+    for identifier in sorted(identifiers or (), key=len, reverse=True):
+        text = re.sub(rf"(?<![A-Za-z0-9_-]){re.escape(identifier)}(?![A-Za-z0-9_-])", "[REDACTED]", text)
     return EMAIL_PATTERN.sub("[EMAIL_REDACTED]", text)
 
 
@@ -189,18 +219,64 @@ def relative_or_absolute(path: Path, base: Path) -> str:
 
 
 def infer_quality(qc_text: str) -> str:
+    """Only structured gate decisions can certify success; prose may only warn."""
+    try:
+        data = json.loads(qc_text)
+    except (ValueError, TypeError):
+        data = None
+    if isinstance(data, dict):
+        status = data.get("status") if isinstance(data.get("status"), str) else None
+        quality = data.get("quality_status") if isinstance(data.get("quality_status"), str) else None
+        decision = data.get("decision") if isinstance(data.get("decision"), str) else None
+        if quality in {"user_rejected", "rejected", "blocked", "failed"} or status in {"user_rejected", "rejected", "failed", "error"} or data.get("user_rejected") is True:
+            return "blocked"
+        if decision in {"block_visual_tests", "block_generation", "block_stitch", "block_publish"}:
+            return "blocked"
+        if status == "ok" and decision in {"allow_generation", "allow_stitch", "allow_publish"}:
+            return str(decision)
+        if quality == "needs_review" or status == "needs_review":
+            return "needs_review"
+        return "unknown"
     lowered = qc_text.lower()
-    if "block_publish" in lowered or "block_stitch" in lowered or "禁止发布" in qc_text:
+    if any(term in lowered for term in ("block_publish", "block_stitch", "block_generation", "block_visual_tests", "user_rejected")) or any(term in qc_text for term in ("禁止发布", "用户拒收")):
         return "blocked"
-    if "allow_publish" in lowered:
-        return "allow_publish"
-    if "allow_stitch" in lowered:
-        return "allow_stitch"
-    if "allow_generation" in lowered:
-        return "allow_generation"
-    if "不建议发布" in qc_text or "未通过" in qc_text:
+    if any(term in lowered for term in ("allow_publish", "allow_stitch", "allow_generation")) or "不建议发布" in qc_text or "未通过" in qc_text:
         return "needs_review"
     return "unknown"
+
+
+def combined_quality(documents: list[str]) -> str:
+    """Conflicting or rejected revisions are not silently promoted by an old pass."""
+    statuses = {infer_quality(text) for text in documents}
+    for status in ("blocked", "needs_review", "allow_publish", "allow_stitch", "allow_generation"):
+        if status in statuses:
+            return status
+    return "unknown"
+
+
+def failure_excerpt(text: str) -> str:
+    """Prefer concrete structured failure facts over a similarity-selected chunk."""
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    facts = []
+    for key in ("finding", "findings", "errors", "hard_vetoes", "negative_lessons"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            facts.append(value.strip())
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    facts.append(item.strip())
+                elif isinstance(item, dict):
+                    for field in ("observation", "finding", "error", "lesson", "reason"):
+                        detail = item.get(field)
+                        if isinstance(detail, str) and detail.strip():
+                            facts.append(detail.strip())
+    return re.sub(r"\s+", " ", " ".join(facts)).strip()[:500]
 
 
 def extract_source_info(text: str) -> tuple[str, str]:
@@ -241,6 +317,7 @@ def portable_asset_path(value: str, case_root: Path, case_id: str) -> str:
 
 def make_portable(cases: list[dict], documents: list[dict]) -> None:
     roots = {case["case_id"]: Path(case["root_path"]) for case in cases}
+    identifiers = portable_ids([document["text"] for document in documents])
     for case in cases:
         case_id = case["case_id"]
         root = roots[case_id]
@@ -253,7 +330,7 @@ def make_portable(cases: list[dict], documents: list[dict]) -> None:
     for document in documents:
         case_id = document["case_id"]
         document["path"] = portable_asset_path(document["path"], roots[case_id], case_id)
-        document["text"] = portable_text(document["text"])
+        document["text"] = portable_text(document["text"], identifiers)
 
 
 def output_cases(workspace: Path, portable: bool = False) -> tuple[list[dict], list[dict]]:
@@ -271,15 +348,13 @@ def output_cases(workspace: Path, portable: bool = False) -> tuple[list[dict], l
             if doc_type == "other" and path.name not in {"README.md", "final_report.md"}:
                 continue
             text = read_text(path)
-            if portable:
-                text = portable_text(text)
-            if text and any(term.lower() in text.lower() for term in VIDEO_TERMS):
+            if text and (any(term.lower() in text.lower() for term in VIDEO_TERMS)
+                         or doc_type == "qc_review" and infer_quality(text) != "unknown"):
                 selected.append((path, doc_type, text))
         if not selected:
             continue
 
         combined = "\n".join(text[:25000] for _, _, text in selected)
-        qc_text = "\n".join(text for _, kind, text in selected if kind == "qc_review")
         source_path, source_sha = root_source_info(root)
         case_id = "output_" + hashlib.sha1(str(root).encode("utf-8")).hexdigest()[:16]
         paths_by_type: dict[str, list[str]] = defaultdict(list)
@@ -317,7 +392,7 @@ def output_cases(workspace: Path, portable: bool = False) -> tuple[list[dict], l
             )
             if not generated_qc_frame and asset_hint:
                 storyboard_assets.append(str(path))
-        quality = infer_quality(qc_text)
+        quality = combined_quality([text for _, kind, text in selected if kind == "qc_review"])
         tags = extract_tags(f"{root.name}\n{combined}")
         cases.append({
             "case_id": case_id,
@@ -433,7 +508,11 @@ def init_schema(connection: sqlite3.Connection) -> None:
     """)
 
 
-def import_seed(connection: sqlite3.Connection, seed_index: Path | None) -> tuple[int, int]:
+def import_seed(
+    connection: sqlite3.Connection,
+    seed_index: Path | None,
+    portable: bool = False,
+) -> tuple[int, int]:
     if not seed_index or not seed_index.is_file():
         return 0, 0
     source = sqlite3.connect(f"file:{seed_index.resolve()}?mode=ro", uri=True)
@@ -441,12 +520,49 @@ def import_seed(connection: sqlite3.Connection, seed_index: Path | None) -> tupl
         schema = source.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
         if not schema or schema[0] not in {"1", "2"}:
             raise ValueError(f"unsupported seed schema: {schema[0] if schema else 'missing'}")
-        case_rows = list(source.execute("SELECT * FROM cases"))
-        document_rows = list(source.execute("SELECT * FROM documents"))
+        case_columns = [row[1] for row in source.execute("PRAGMA table_info(cases)")]
+        document_columns = [row[1] for row in source.execute("PRAGMA table_info(documents)")]
+        case_rows = [dict(zip(case_columns, row)) for row in source.execute("SELECT * FROM cases")]
+        document_rows = [dict(zip(document_columns, row)) for row in source.execute("SELECT * FROM documents")]
     finally:
         source.close()
-    connection.executemany("INSERT OR IGNORE INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", case_rows)
-    connection.executemany("INSERT OR IGNORE INTO documents VALUES (?,?,?,?,?,?,?,?,?)", document_rows)
+    if portable:
+        identifiers = portable_ids([row["text"] for row in document_rows])
+        for case in case_rows:
+            case_id = case["case_id"]
+            case["title"] = portable_text(case["title"], identifiers)
+            case["root_path"] = f"case://{case_id}"
+            case["source_video_path"] = (
+                f"sha256://{case['source_sha256']}" if case["source_sha256"] else ""
+            )
+            case["source_video_available"] = 0
+            for key in ("analysis_files_json", "script_files_json", "prompt_files_json",
+                        "storyboard_files_json", "qc_files_json"):
+                values = json.loads(case[key])
+                case[key] = json.dumps([
+                    value if value.startswith("case://")
+                    else f"case://{case_id}/{Path(value).name}"
+                    for value in values
+                ], ensure_ascii=False)
+            case["source_kind"] = "seed_case"
+        for document in document_rows:
+            case_id = document["case_id"]
+            if not document["path"].startswith("case://"):
+                document["path"] = f"case://{case_id}/{Path(document['path']).name}"
+            document["title"] = portable_text(document["title"], identifiers)
+            document["text"] = portable_text(document["text"], identifiers)
+            tags = json.loads(document["tags_json"])
+            document["vector"] = pack_vector(vectorize(
+                f"{document['title']}\n{document['text']}", tags
+            ))
+    connection.executemany(
+        "INSERT OR IGNORE INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [tuple(row[column] for column in case_columns) for row in case_rows],
+    )
+    connection.executemany(
+        "INSERT OR IGNORE INTO documents VALUES (?,?,?,?,?,?,?,?,?)",
+        [tuple(row[column] for column in document_columns) for row in document_rows],
+    )
     return len(case_rows), len(document_rows)
 
 
@@ -493,7 +609,7 @@ def build_library(
         connection.execute("INSERT INTO metadata VALUES (?, ?)", ("schema_version", "2"))
         connection.execute("INSERT INTO metadata VALUES (?, ?)", ("vector_model", f"local-hash-zh-{VECTOR_DIM}"))
         connection.execute("INSERT INTO metadata VALUES (?, ?)", ("portable", str(portable).lower()))
-        seed_case_count, seed_document_count = import_seed(connection, seed_index)
+        seed_case_count, seed_document_count = import_seed(connection, seed_index, portable=portable)
         for case in cases:
             connection.execute(
                 "INSERT OR REPLACE INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -559,6 +675,33 @@ def load_cases(connection: sqlite3.Connection) -> dict[str, dict]:
     return result
 
 
+def output_review_scope(data: dict) -> str | None:
+    decision = data.get("decision")
+    expected_stage = {"allow_stitch": "pre-stitch", "allow_publish": "pre-publish"}.get(decision)
+    if expected_stage is None or data.get("stage") != expected_stage:
+        return None
+    results = data.get("results", {})
+    if not isinstance(results, dict) or any(
+        not isinstance(results.get(name), dict) or results[name].get("status") != "ok"
+        or results[name].get("errors") for name in ("delivery", "director", "transcript")
+    ):
+        return None
+    outputs = results["delivery"].get("outputs")
+    if not isinstance(outputs, list) or not outputs or any(
+        not isinstance(item, dict) or not item.get("clip_id") or not item.get("file")
+        or not isinstance(item.get("duration_seconds"), (int, float)) or item["duration_seconds"] <= 0
+        or item.get("has_audio") is not True for item in outputs
+    ):
+        return None
+    if decision == "allow_publish":
+        final = results.get("final", {})
+        if (not isinstance(final, dict) or final.get("status") != "ok" or final.get("errors")
+                or not final.get("file") or not re.fullmatch(r"[a-fA-F0-9]{64}", str(final.get("sha256", "")))):
+            return None
+        return "reviewed_final_video"
+    return "reviewed_clips"
+
+
 def search_library(index: Path, query: str, top_k: int = 5) -> dict:
     connection = sqlite3.connect(index)
     try:
@@ -566,9 +709,12 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
         query_tags = extract_tags(query)
         query_vector = vectorize(query, query_tags)
         per_case: dict[str, list[dict]] = defaultdict(list)
+        qc_documents: dict[tuple[str, str], list[tuple[int, str]]] = defaultdict(list)
         for doc_id, case_id, doc_type, path, title, text, weight, tags_json, blob in connection.execute(
             "SELECT doc_id,case_id,doc_type,path,title,text,weight,tags_json,vector FROM documents"
         ):
+            if doc_type == "qc_review":
+                qc_documents[(case_id, path)].append((int(doc_id.rsplit("_", 1)[-1]), text))
             tags = json.loads(tags_json)
             union = set(tags) | set(query_tags)
             overlap = len(set(tags) & set(query_tags)) / len(union) if union else 0.0
@@ -582,6 +728,26 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
             })
     finally:
         connection.close()
+
+    quality_evidence: dict[str, list[dict]] = defaultdict(list)
+    failed_qc_paths: set[tuple[str, str]] = set()
+    failed_qc_text: dict[tuple[str, str], str] = {}
+    for (case_id, path), parts in qc_documents.items():
+        text = "".join(part for _, part in sorted(parts))
+        decision = infer_quality(text)
+        if decision == "blocked":
+            failed_qc_paths.add((case_id, path))
+            failed_qc_text[(case_id, path)] = text
+        if decision in SUCCESS_LEVELS:
+            data = json.loads(text)
+            scope = output_review_scope(data)
+            quality_evidence[case_id].append({
+                "file": path, "decision": decision,
+                "archived_content_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "matched_stage": data.get("stage"),
+                "template_scope": scope or "design_reference",
+                "reviewed_outputs": data["results"]["delivery"]["outputs"] if scope else [],
+            })
 
     recommendations = []
     negative_lessons = []
@@ -599,10 +765,15 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
         adjusted_score = max(0.0, best["score"] + constraint_adjustment)
         has_reference = any(hit["doc_type"] == "reference_analysis" for hit in hits[:8])
         blocked = case["quality_status"] == "blocked"
+        verified = next((proof for proof in quality_evidence[case_id]
+                         if proof["decision"] == case["quality_status"]
+                         and proof["template_scope"] in {"reviewed_clips", "reviewed_final_video"}), None)
         if blocked and not has_reference:
             reuse_scope = "negative_lessons_only"
         elif blocked:
             reuse_scope = "reference_analysis_only"
+        elif verified is None:
+            reuse_scope = "reference_candidate"
         else:
             reuse_scope = "analysis_script_storyboard"
         item = {
@@ -611,6 +782,14 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
             "score": round(adjusted_score, 6),
             "matched_tags": sorted(set(case["tags"]) & set(query_tags)),
             "quality_status": case["quality_status"],
+            "quality_evidence": quality_evidence[case_id],
+            "template_scope": verified["template_scope"] if verified else (
+                "design_reference" if case["quality_status"] == "allow_generation" else "reference_candidate"
+            ),
+            "matched_stage": verified["matched_stage"] if verified else next(
+                (proof["matched_stage"] for proof in quality_evidence[case_id]
+                 if proof["decision"] == case["quality_status"]), None
+            ),
             "reuse_scope": reuse_scope,
             "source_kind": case["source_kind"],
             "root_path": case["root_path"],
@@ -624,12 +803,17 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
         }
         if reuse_scope != "negative_lessons_only":
             recommendations.append(item)
-        qc_hits = [hit for hit in hits if hit["doc_type"] == "qc_review"]
+        qc_hits = [hit for hit in hits if (case_id, hit["path"]) in failed_qc_paths]
         if blocked and qc_hits:
+            best_failure_hit = dict(qc_hits[0])
+            concrete_excerpt = failure_excerpt(failed_qc_text[(case_id, best_failure_hit["path"])])
+            if concrete_excerpt:
+                best_failure_hit["excerpt"] = concrete_excerpt
             negative_lessons.append({
-                "title": case["title"], "score": qc_hits[0]["score"],
-                "quality_status": case["quality_status"], "qc_files": case["qc_files"],
-                "matched_document": qc_hits[0],
+                "title": case["title"], "score": best_failure_hit["score"],
+                "quality_status": case["quality_status"],
+                "qc_files": list(dict.fromkeys(hit["path"] for hit in qc_hits)),
+                "matched_document": best_failure_hit,
             })
     recommendations.sort(key=lambda item: item["score"], reverse=True)
     negative_lessons.sort(key=lambda item: item["score"], reverse=True)
@@ -637,6 +821,8 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
     production_template = next(
         (item for item in recommendations
          if item["reuse_scope"] == "analysis_script_storyboard"
+         and item["quality_status"] in OUTPUT_SUCCESS_LEVELS
+         and any(proof["decision"] == item["quality_status"] for proof in item["quality_evidence"])
          and item["source_kind"] in {"workspace_output", "seed_case"}
          and (item["script_files"] or item["storyboard_files"])),
         None,
@@ -649,7 +835,7 @@ def search_library(index: Path, query: str, top_k: int = 5) -> dict:
         "production_template": production_template,
         "alternatives": recommendations[1:top_k],
         "negative_lessons": negative_lessons[:3],
-        "rule": "blocked案例只可复用原片分析或失败教训，不得复用其未通过脚本、提示词和分镜。",
+        "rule": "blocked案例只可复用原片分析或失败教训；unknown/needs_review/allow_generation仅作参考候选或设计参考。生产模板只接受含真实输出及导演/对白审核的allow_stitch或allow_publish证据，范围以template_scope和matched_stage为准。",
     }
 
 
@@ -660,7 +846,14 @@ def render_markdown(result: dict) -> str:
     if result["production_template"]:
         lines += ["## 可复用生产模板", "",
                   f"- {result['production_template']['title']}",
+                  f"- 已验证阶段：{result['production_template']['matched_stage']}",
+                  f"- 模板范围：{result['production_template']['template_scope']}",
                   f"- 允许复用：{result['production_template']['reuse_scope']}", ""]
+        for proof in result["production_template"]["quality_evidence"]:
+            lines.append(f"- QC证据：`{proof['file']}`（{proof['decision']}；存档文本SHA-256：`{proof['archived_content_sha256']}`）")
+        lines.append("")
+    else:
+        lines += ["## 可复用生产模板", "", "暂无具备真实输出审核证据的生产模板；生成前通过仅作设计参考，以下匹配仅作参考候选。", ""]
     recommendations = [result["main_reference"]] + result["alternatives"] if result["main_reference"] else []
     lines += ["## 推荐参考", ""]
     for index, item in enumerate(recommendations, start=1):
@@ -716,12 +909,15 @@ def show_case(index: Path, case_id: str) -> dict:
 
 def render_case_markdown(result: dict) -> str:
     case = result["case"]
+    scope = "reference_analysis_only" if case["quality_status"] == "blocked" else (
+        "analysis_script_storyboard" if case["quality_status"] in OUTPUT_SUCCESS_LEVELS else "reference_candidate"
+    )
     lines = [
         f"# {case['title']}",
         "",
         f"- 案例 ID：`{case['case_id']}`",
         f"- 质量状态：{case['quality_status']}",
-        f"- 可复用范围：{'reference_analysis_only' if case['quality_status'] == 'blocked' else 'analysis_script_storyboard'}",
+        f"- 可复用范围：{scope}",
         f"- 机制标签：{'、'.join(case['tags']) or '未分类'}",
         "",
     ]

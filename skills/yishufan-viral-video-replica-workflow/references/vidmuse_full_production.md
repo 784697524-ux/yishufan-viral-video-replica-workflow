@@ -4,7 +4,7 @@
 
 ## 进入条件
 
-- `08_replica_contract.json`使用schema v4，`brief_alignment.production_scope=full_video`。
+- 新生产的`08_replica_contract.json`使用schema v5，`brief_alignment.production_scope=full_video`；v3/v4仅作legacy审计，不授予生产权限。
 - `run_quality_gate.py --stage pre-generation`返回`decision=allow_generation`。
 - 产品资产、风格锁、人物设定、故事板、动作关键帧、逐镜头运动链和目标模型已经由用户确认或有明确来源。
 - `music_strategy.status`为`source_locked`或`user_confirmed`。音乐待选时先产出最多3个候选并暂停；不得先生成视频再随意铺音乐。

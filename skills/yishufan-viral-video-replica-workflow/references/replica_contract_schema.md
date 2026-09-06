@@ -1,10 +1,12 @@
-# 复刻合同 JSON 规范（schema v4）
+# 复刻合同基础字段（v4历史示例；新生产用v5）
 
-每个新项目必须在生成分镜前创建 `08_replica_contract.json`。它是验证器的唯一机器真相源，用来防止漏剧情、分段越界、照片错配、音乐丢失、指定文字遗漏和AI表误覆盖。
+新生产完整读取[creative_direction_v5.md](creative_direction_v5.md)，使用schema_version=5并增加其中证据。以下v4样例用于理解基础字段，不可直接当新项目已通过模板；v5静态源、3至5候选、具体商业关联、独立审稿和分阶段准入覆盖旧约束。
 
-## 必填结构
+V7.3新项目把故事、镜头和连续状态的人工权威收敛为`03_director_plan.json`，并在合同声明`director_core_version=7.3`与`director_plan_file`。`08_replica_contract.json`继续负责资产、权限和发布门禁；兼容字段以Sxx/Pxx引用导演计划，不再另建重复的人工映射文档。
 
-下例为节省篇幅只展开`C01`；实际合同的`candidates`必须至少包含`C01`至`C05`五套完整对象。
+## legacy schema v4 基础结构
+
+下例为节省篇幅只展开旧版`C01`；旧版曾要求`C01`至`C05`五套完整对象。新项目的候选数量、审核和美术证据按v5规范填写，不能直接复制此例后改版本号。
 
 ```json
 {
@@ -303,7 +305,7 @@
 
 ## 不变量
 
-- 新项目使用`schema_version=4`。历史schema v3仍可读取，但验证器只给兼容性警告，不会为其补出产品/风格锁和运动链证据。
+- 新项目使用`schema_version=5`，并补齐[creative_direction_v5.md](creative_direction_v5.md)中的增量证据。上方schema v4 JSON及以下旧版约束是legacy基础字段示例；冲突处以v5规范为准。历史schema v3/v4仅可用`--audit-legacy`只读审计，不授予生产权限。
 - `mode`只能有一个值，禁止把三种模式写进同一合同。
 - `brief_alignment`必须锁定用户原始模式与时长，并用`ai_table_requested`和`production_scope`记录素材包、AI表交付或完整视频。任何模式或时长变化都要分别写明原因，并将对应的`*_user_confirmed`设为`true`；不得由程序静默改约。AI表交付为`true`时，合同不得省略`aitable_handoff`。
 - `deliverables.visual_lock`必须指向`02_visual_lock.md`。`product_identity.reference_assets`至少一项且文件/哈希真实一致；六项产品特征必须逐项锁定，未知角度一律`do_not_invent`。
@@ -320,7 +322,7 @@
 - `creative_room`必须先提取参考片机制DNA，再提供至少5套概念。每套至少填写两个`difference_axes`并使用不同`mechanism_signature`；六项评分总分必须由分项相加。入选方案不低于85分且`hard_vetoes`为空，未入选方案必须写`rejection_reason`。
 - `creative_room.table_read`必须逐项覆盖`narrative_qc.story_chain`，对白完成朗读计时，所有问题清零，并确认删除商品会破坏故事因果；否则不得进入逐秒剧本。
 - `narrative_qc.story_chain`必须按“问题→选择→后果→结局”展开；每一步由`caused_by`指向更早步骤，最后一步必须`answers`开头问题。商品至少承担证据、筹码、诱因、障碍或解决工具中的一种，不能全部写成`none`。
-- 不再由作者自报节拍数、口播秒数和汉字数。`clip_policies`只声明表达类型，`analyze_script.py`直接解析逐秒脚本：每段最多3个可执行单元；剧情对白最多占60%，蒙太奇旁白最多75%，古诗朗读最多92%，语速不超过4.2字/秒；剧情片每段最多2个说话单元和1行主商品事实。
+- 不再由作者自报节拍数、口播秒数和汉字数。`clip_policies`只声明表达类型，`analyze_script.py`直接解析逐秒脚本：每段默认最多3个可执行单元；剧情对白最多占60%，蒙太奇旁白最多75%，古诗朗读最多92%，语速不超过4.2字/秒；剧情片每段默认最多2个说话单元和1行主商品事实。只有同一模型、相近时长和复杂度的真实成片已经核验，才可用`clip.model_capacity={max_script_units,max_spoken_turns,max_product_fact_rows,evidence_file,evidence_sha256,evidence_note}`上调；证据必须位于项目内并匹配SHA，否则阻断。
 - `dialogue_requirements`覆盖每个非静音Clip。`exact`用于限定时间窗内逐字相同，`contains`用于完整关键句，`terms`用于多个不可丢失词。
 - 所有关键道具写入`prop_continuity_requirements`，至少列出取出/出现、交接/使用和结果事件。`director_requirements`必须定义结尾记忆点和至少一条“起点→转折→结果”表演弧。
 - `finale_policy`必须二选一：`{"type":"story_action"}`要求结尾记忆点在最后3秒发生；真实商品图收尾时使用`{"type":"source_fact_card","source_file":"assets/product_card.png","start_seconds":28,"end_seconds":30}`，剧情解决证据必须早于卡片开始，卡片默认1至2秒且最长2.5秒。

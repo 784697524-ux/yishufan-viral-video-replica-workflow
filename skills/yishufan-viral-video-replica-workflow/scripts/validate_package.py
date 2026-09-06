@@ -7,13 +7,14 @@ import argparse
 import hashlib
 import json
 import re
-import struct
 from pathlib import Path
+
+from PIL import Image
 
 
 CONTRACT_FILE = "08_replica_contract.json"
 ALLOWED_MODES = {"高保真视觉复刻", "爆款机制迁移", "商业混合复刻"}
-SUPPORTED_SCHEMA_VERSIONS = {3, 4}
+SUPPORTED_SCHEMA_VERSIONS = {3, 4, 5}
 MAX_AITABLE_ATTACHMENTS = 9
 CREATIVE_SCORE_LIMITS = {
     "hook": 20,
@@ -42,11 +43,13 @@ LEGACY_REQUIRED_FILES = [
 
 
 def png_size(path: Path) -> tuple[int, int]:
-    with path.open("rb") as handle:
-        header = handle.read(24)
-    if len(header) < 24 or header[:8] != b"\x89PNG\r\n\x1a\n":
-        raise ValueError("not a PNG file")
-    return struct.unpack(">II", header[16:24])
+    with Image.open(path) as image:
+        if image.format != "PNG":
+            raise ValueError("not a PNG file")
+        image.verify()
+    with Image.open(path) as image:
+        image.load()
+        return image.size
 
 
 def file_hash(path: Path) -> str:
@@ -86,7 +89,27 @@ def required_path(project: Path, relative: object, errors: list[str], label: str
 
 
 def read_text(path: Path | None) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore") if path else ""
+    return path.read_text(encoding="utf-8", errors="ignore") if path and path.is_file() else ""
+
+
+def planned_path(project: Path, relative: object, errors: list[str], label: str) -> Path | None:
+    """Check an ungenerated asset declaration without pretending the asset exists."""
+    if not isinstance(relative, str) or not relative.strip():
+        errors.append(f"missing {label} path")
+        return None
+    if Path(relative).is_absolute():
+        errors.append(f"{label} must be a relative project path")
+        return None
+    path = (project / relative).resolve()
+    try:
+        path.relative_to(project.resolve())
+    except ValueError:
+        errors.append(f"{label} escapes project directory: {relative}")
+        return None
+    if path.is_dir():
+        errors.append(f"{label} names a directory: {relative}")
+        return None
+    return path
 
 
 def normalize_phrase(text: str) -> str:
@@ -115,7 +138,7 @@ def as_float(value: object, errors: list[str], label: str) -> float | None:
 def validate_png(path: Path, errors: list[str]) -> None:
     try:
         width, height = png_size(path)
-    except ValueError as exc:
+    except (OSError, ValueError, SyntaxError) as exc:
         errors.append(f"{path.name}: {exc}")
         return
     if abs(width / height - 9 / 16) > 0.015:
@@ -131,6 +154,7 @@ def validate_production_design(
     prompt_texts: dict[str, str],
     storyboard_paths: dict[str, Path],
     errors: list[str],
+    stage: str = "pre-generation",
 ) -> int:
     """Validate schema v4 product/style locks and one executable motion plan per beat."""
 
@@ -173,6 +197,11 @@ def validate_production_design(
             if not isinstance(asset.get("role"), str) or not asset.get("role", "").strip():
                 errors.append(f"{label}.role is required")
             if path:
+                try:
+                    with Image.open(path) as image:
+                        image.load()
+                except (OSError, ValueError, SyntaxError) as exc:
+                    errors.append(f"{label} product reference is not a decodable image: {exc}")
                 product_asset_names.add(path.name)
 
     visual_style = design.get("visual_style")
@@ -206,6 +235,8 @@ def validate_production_design(
             errors.append("production_design.visual_style.reusable_prompt is missing from the visual lock deliverable")
 
     for clip_id, prompt_text in prompt_texts.items():
+        if stage == "pre-visual" and not prompt_text:
+            continue
         if style_lock_id and style_lock_id not in prompt_text:
             errors.append(f"{clip_id} prompt must reference visual style lock_id: {style_lock_id}")
         if reusable_prompt and normalize_phrase(reusable_prompt) not in normalize_phrase(prompt_text):
@@ -284,7 +315,7 @@ def validate_production_design(
             errors.append(f"{label}.product_visibility must be visible or withheld_for_reveal")
         elif product_visibility == "visible":
             prompt_text = prompt_texts.get(str(clip_id), "")
-            if product_asset_names and not any(name in prompt_text for name in product_asset_names):
+            if (stage != "pre-visual" or prompt_text) and product_asset_names and not any(name in prompt_text for name in product_asset_names):
                 errors.append(f"{label} visible product must reference a locked product asset filename in its prompt")
         for field in motion_fields:
             value = motion.get(field)
@@ -332,13 +363,91 @@ def validate_production_design(
     return len(motion_beats)
 
 
-def validate_contract(project: Path, contract: dict) -> dict:
+def validate_static_source(project: Path, source: dict, contract: dict, errors: list[str]) -> set[str]:
+    """Validate static evidence itself, never invent video timing for illustrations."""
+    if source.get("source_type") != "static_images":
+        errors.append("static source manifest.source_type must be static_images")
+    reference_source = contract.get("reference_source")
+    if not isinstance(reference_source, dict) or reference_source.get("kind") != "static_images":
+        errors.append("reference_source.kind must be static_images for a static source")
+    if "duration_seconds" not in source or source.get("duration_seconds") is not None:
+        errors.append("static source duration_seconds must be null")
+    if source.get("audio_present") is not False:
+        errors.append("static source audio_present must be false")
+    for key in ("timeline_manifest", "interval_seconds", "frame_count", "last_timestamp_seconds"):
+        if source.get(key) is not None:
+            errors.append(f"static source must not declare video field {key}")
+    if contract.get("deliverables", {}).get("timeline_manifest"):
+        errors.append("static source must not declare a video timeline_manifest")
+    review = contract.get("evidence_review", {})
+    if not isinstance(review, dict):
+        errors.append("static evidence_review must be an object")
+        review = {}
+    for key in ("fixed_timeline_manual_reviewed", "reviewed_frame_count", "reviewed_last_timestamp_seconds"):
+        if review.get(key) is not None:
+            errors.append(f"static evidence_review must not declare video field {key}")
+    assets = source.get("assets")
+    if not isinstance(assets, list) or not assets:
+        errors.append("static source assets must be a non-empty array")
+        assets = []
+    assets_by_id: dict[str, dict] = {}
+    for index, asset in enumerate(assets):
+        label = f"static source assets[{index}]"
+        if not isinstance(asset, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        asset_id = asset.get("id")
+        if not isinstance(asset_id, str) or not asset_id.strip() or asset_id in assets_by_id:
+            errors.append(f"{label}.id must be unique and non-empty")
+        else:
+            assets_by_id[asset_id] = asset
+        if asset.get("role") not in {"scene", "style_detail", "character_detail"}:
+            errors.append(f"{label}.role must be scene, style_detail, or character_detail")
+        path = required_path(project, asset.get("file"), errors, f"{label}.file")
+        digest = asset.get("sha256")
+        if not isinstance(digest, str) or not re.fullmatch(r"[a-fA-F0-9]{64}", digest):
+            errors.append(f"{label}.sha256 must be a SHA-256 digest")
+        elif path and file_hash(path).lower() != digest.lower():
+            errors.append(f"{label}.sha256 does not match the static source asset")
+        if path:
+            try:
+                with Image.open(path) as image:
+                    image.load()
+            except (OSError, ValueError, SyntaxError) as exc:
+                errors.append(f"{label} is not a decodable image: {exc}")
+    review_path = required_path(project, review.get("static_review_file"), errors, "static review file")
+    data = load_json(review_path, errors, "static review file") if review_path else {}
+    observations = data.get("assets")
+    if not isinstance(observations, list):
+        errors.append("static review assets must be an array")
+        observations = []
+    reviewed_ids: set[str] = set()
+    for index, item in enumerate(observations):
+        label = f"static review assets[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{label} must be an object")
+            continue
+        asset_id = item.get("id")
+        if not isinstance(asset_id, str) or asset_id not in assets_by_id or asset_id in reviewed_ids:
+            errors.append(f"{label}.id must name one unique static source asset")
+        else:
+            reviewed_ids.add(asset_id)
+            if item.get("source_sha256") != assets_by_id[asset_id].get("sha256"):
+                errors.append(f"{label}.source_sha256 does not match its source asset")
+        if not isinstance(item.get("observation"), str) or not item.get("observation", "").strip():
+            errors.append(f"{label}.observation must contain a concrete source observation")
+    if reviewed_ids != set(assets_by_id):
+        errors.append("static review must cover every source asset exactly once")
+    return set(assets_by_id)
+
+
+def validate_contract(project: Path, contract: dict, stage: str = "pre-generation") -> dict:
     errors: list[str] = []
     warnings: list[str] = []
 
     schema_version = contract.get("schema_version")
     if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
-        errors.append("08_replica_contract.json schema_version must be 3 or 4")
+        errors.append("08_replica_contract.json schema_version must be 3, 4, or 5")
     elif schema_version == 3:
         warnings.append("schema v3 remains readable but does not enforce product/style locks or executable motion chains")
     mode = contract.get("mode")
@@ -363,7 +472,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
                 errors.append("brief_alignment.mode_change_reason is required when the replica mode changes")
         if not isinstance(brief_alignment.get("ai_table_requested"), bool):
             errors.append("brief_alignment.ai_table_requested must be true or false")
-        if schema_version == 4 and brief_alignment.get("production_scope") not in {
+        if schema_version in {4, 5} and brief_alignment.get("production_scope") not in {
             "package_only",
             "ai_table_handoff",
             "full_video",
@@ -391,6 +500,13 @@ def validate_contract(project: Path, contract: dict) -> dict:
         mode == "爆款机制迁移"
         and source_manifest.get("source_type") == "historical_vector_library"
     )
+    reference_source = contract.get("reference_source", {})
+    static_mode = schema_version == 5 and (
+        source_manifest.get("source_type") == "static_images"
+        or isinstance(reference_source, dict) and reference_source.get("kind") == "static_images"
+    )
+    static_asset_ids = validate_static_source(project, source_manifest, contract, errors) if static_mode else set()
+    asset_path = planned_path if stage == "pre-visual" else required_path
     paths: dict[str, Path | None] = {
         name: required_path(project, deliverables.get(name), errors, f"deliverable {name}")
         for name in (
@@ -399,10 +515,12 @@ def validate_contract(project: Path, contract: dict) -> dict:
             "mapping",
             "script",
             "qc",
-            "character_sheet",
         )
     }
-    if schema_version == 4:
+    paths["character_sheet"] = asset_path(project, deliverables.get("character_sheet"), errors, "deliverable character_sheet")
+    if schema_version == 5 and paths["facts"] and not read_text(paths["facts"]).strip():
+        errors.append("product facts must contain sourced facts and explicit unknowns, not an empty file")
+    if schema_version in {4, 5}:
         paths["visual_lock"] = required_path(
             project,
             deliverables.get("visual_lock"),
@@ -412,7 +530,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
     paths["source_manifest"] = source_manifest_path
     paths["timeline_manifest"] = (
         None
-        if historical_vector_mode and not deliverables.get("timeline_manifest")
+        if static_mode or historical_vector_mode and not deliverables.get("timeline_manifest")
         else required_path(
             project,
             deliverables.get("timeline_manifest"),
@@ -424,7 +542,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
     script_text = read_text(paths["script"])
     analysis_text = read_text(paths["analysis"])
     character_sheet = paths["character_sheet"]
-    if character_sheet:
+    if character_sheet and stage != "pre-visual":
         validate_png(character_sheet, errors)
 
     expected_sha = contract.get("source_sha256")
@@ -481,11 +599,19 @@ def validate_contract(project: Path, contract: dict) -> dict:
 
     target_duration = as_float(contract.get("target_duration_seconds"), errors, "target_duration_seconds")
     if isinstance(brief_alignment, dict):
-        requested_duration = as_float(
-            brief_alignment.get("requested_duration_seconds"),
-            errors,
-            "brief_alignment.requested_duration_seconds",
-        )
+        delegated_duration = schema_version == 5 and brief_alignment.get("duration_policy") == "user_delegated"
+        if delegated_duration:
+            requested_duration = None
+            if brief_alignment.get("requested_duration_seconds") is not None:
+                errors.append("user_delegated duration must not erase an explicit requested duration")
+            if not isinstance(brief_alignment.get("duration_authority"), str) or not brief_alignment["duration_authority"].strip():
+                errors.append("user_delegated duration requires the user's actual duration_authority instruction")
+        else:
+            requested_duration = as_float(
+                brief_alignment.get("requested_duration_seconds"),
+                errors,
+                "brief_alignment.requested_duration_seconds",
+            )
         if (
             requested_duration is not None
             and target_duration is not None
@@ -496,7 +622,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
             reason = brief_alignment.get("duration_change_reason")
             if not isinstance(reason, str) or not reason.strip():
                 errors.append("brief_alignment.duration_change_reason is required when target duration changes")
-    source_duration = as_float(source_manifest.get("duration_seconds"), errors, "source duration_seconds")
+    source_duration = None if static_mode else as_float(source_manifest.get("duration_seconds"), errors, "source duration_seconds")
     if (
         mode == "高保真视觉复刻"
         and target_duration is not None
@@ -543,10 +669,10 @@ def validate_contract(project: Path, contract: dict) -> dict:
             previous_end = end
 
         marker = clip.get("prompt_marker")
-        prompt_path = required_path(project, clip.get("prompt_file"), errors, f"{clip_id} prompt_file")
+        prompt_path = asset_path(project, clip.get("prompt_file"), errors, f"{clip_id} prompt_file")
         full_prompt_text = read_text(prompt_path)
         prompt_texts[clip_id] = prompt_section(full_prompt_text, marker)
-        if isinstance(marker, str) and marker and marker not in full_prompt_text:
+        if (stage != "pre-visual" or full_prompt_text) and isinstance(marker, str) and marker and marker not in full_prompt_text:
             errors.append(f"{clip_id} prompt marker not found: {marker}")
 
         files = clip.get("storyboard_files")
@@ -556,17 +682,18 @@ def validate_contract(project: Path, contract: dict) -> dict:
         if len(files) > 9:
             errors.append(f"{clip_id} has {len(files)} storyboard images; maximum is 9")
         for relative in files:
-            path = required_path(project, relative, errors, f"{clip_id} storyboard")
+            path = asset_path(project, relative, errors, f"{clip_id} storyboard")
             if not path:
                 continue
             if path.suffix.lower() != ".png":
                 errors.append(f"{relative}: storyboard must be PNG")
                 continue
-            validate_png(path, errors)
+            if stage != "pre-visual":
+                validate_png(path, errors)
             storyboard_paths[str(relative)] = path
-            if path.name not in prompt_texts[clip_id]:
+            if (stage != "pre-visual" or full_prompt_text) and path.name not in prompt_texts[clip_id]:
                 errors.append(f"{clip_id} prompt does not reference storyboard filename: {path.name}")
-        if character_sheet and character_sheet.name not in prompt_texts[clip_id]:
+        if (stage != "pre-visual" or full_prompt_text) and character_sheet and character_sheet.name not in prompt_texts[clip_id]:
             errors.append(f"{clip_id} prompt does not reference character sheet: {character_sheet.name}")
 
     if target_duration is not None and clips and abs(previous_end - target_duration) > 0.05:
@@ -586,9 +713,9 @@ def validate_contract(project: Path, contract: dict) -> dict:
         to_clip_id = item.get("to_clip_id")
         if from_clip_id not in clip_by_id or to_clip_id not in clip_by_id:
             errors.append(f"continuity[{index}] must name declared from_clip_id and to_clip_id")
-        tail = required_path(project, item.get("tail_file"), errors, f"continuity[{index}] tail_file")
-        head = required_path(project, item.get("head_file"), errors, f"continuity[{index}] head_file")
-        if tail and head and file_hash(tail) != file_hash(head):
+        tail = asset_path(project, item.get("tail_file"), errors, f"continuity[{index}] tail_file")
+        head = asset_path(project, item.get("head_file"), errors, f"continuity[{index}] head_file")
+        if stage != "pre-visual" and tail and head and file_hash(tail) != file_hash(head):
             errors.append(f"continuity anchor differs: {tail.name} != {head.name}")
 
     beats = contract.get("reference_beats")
@@ -639,7 +766,16 @@ def validate_contract(project: Path, contract: dict) -> dict:
         if storyboard_file not in storyboard_paths:
             errors.append(f"{label}.storyboard_file is not declared by its clip: {storyboard_file}")
 
-        source_start = as_float(beat.get("source_start_seconds"), errors, f"{label}.source_start_seconds")
+        if static_mode:
+            for field in ("source_start_seconds", "source_end_seconds"):
+                if field not in beat or beat.get(field) is not None:
+                    errors.append(f"{label}.{field} must be null for static source evidence")
+            source_ids = beat.get("source_asset_ids")
+            if not isinstance(source_ids, list) or not source_ids or any(not isinstance(value, str) or value not in static_asset_ids for value in source_ids):
+                errors.append(f"{label}.source_asset_ids must reference real static source assets")
+            source_start = None
+        else:
+            source_start = as_float(beat.get("source_start_seconds"), errors, f"{label}.source_start_seconds")
         target_start = as_float(beat.get("target_start_seconds"), errors, f"{label}.target_start_seconds")
         if source_start is not None:
             if source_start < previous_source_start:
@@ -650,8 +786,8 @@ def validate_contract(project: Path, contract: dict) -> dict:
                 errors.append(f"{label} target order regresses")
             previous_target_start = target_start
 
-        if mode == "高保真视觉复刻":
-            source_end = as_float(beat.get("source_end_seconds"), errors, f"{label}.source_end_seconds")
+        if mode == "高保真视觉复刻" or static_mode:
+            source_end = None if static_mode else as_float(beat.get("source_end_seconds"), errors, f"{label}.source_end_seconds")
             target_end = as_float(beat.get("target_end_seconds"), errors, f"{label}.target_end_seconds")
             if source_start is not None:
                 if first_source_start is None:
@@ -689,6 +825,8 @@ def validate_contract(project: Path, contract: dict) -> dict:
             (Path(str(storyboard_file)).name, mapping_text, "mapping"),
             (Path(str(storyboard_file)).name, prompt_text, "prompt"),
         ):
+            if stage == "pre-visual" and where == "prompt" and not text:
+                continue
             if isinstance(value, str) and value and value not in text:
                 errors.append(f"{label} missing {value} in {where}")
         terms = beat.get("required_terms", [])
@@ -698,7 +836,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
         for term in terms:
             if not isinstance(term, str) or not term:
                 errors.append(f"{label}.required_terms contains an invalid value")
-            elif term not in script_text or term not in prompt_text:
+            elif term not in script_text or (stage != "pre-visual" or prompt_text) and term not in prompt_text:
                 errors.append(f"{label} required term missing from script or prompt: {term}")
 
     analysis_ids = set(re.findall(r"\bR\d{2,}\b", analysis_text))
@@ -706,7 +844,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
     if missing_beats:
         errors.append("reference beat ledger is not fully mapped: " + ", ".join(missing_beats))
 
-    if mode == "高保真视觉复刻" and beats:
+    if (mode == "高保真视觉复刻" or static_mode) and beats:
         if first_source_start is not None and first_source_start > 0.05:
             errors.append("high-fidelity beat ledger must start at source 0s")
         if first_target_start is not None and first_target_start > 0.05:
@@ -719,14 +857,14 @@ def validate_contract(project: Path, contract: dict) -> dict:
             errors.append(
                 f"high-fidelity target beat coverage ends at {last_target_end:.3f}s, not {target_duration:.3f}s"
             )
-        overloaded = sorted(clip_id for clip_id, count in beat_counts_by_clip.items() if count > 3)
+        overloaded = sorted(clip_id for clip_id, count in beat_counts_by_clip.items() if count > 3) if mode == "高保真视觉复刻" else []
         if overloaded:
             errors.append(
                 "high-fidelity clips contain more than 3 causal beats and must be split: " + ", ".join(overloaded)
             )
 
     motion_beat_count = 0
-    if schema_version == 4:
+    if schema_version in {4, 5}:
         motion_beat_count = validate_production_design(
             project,
             contract,
@@ -736,6 +874,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
             prompt_texts,
             storyboard_paths,
             errors,
+            stage=stage,
         )
 
     audio_assets = contract.get("audio_assets", [])
@@ -756,9 +895,9 @@ def validate_contract(project: Path, contract: dict) -> dict:
         prompt_text = prompt_texts.get(str(clip_id), "")
         if path:
             audio_by_clip.setdefault(str(clip_id), []).append(path.name)
-            if path.name not in prompt_text:
+            if (stage != "pre-visual" or prompt_text) and path.name not in prompt_text:
                 errors.append(f"{clip_id} prompt does not reference audio filename: {path.name}")
-            if mode == "高保真视觉复刻" and "不换其他音乐" not in prompt_text:
+            if (stage != "pre-visual" or prompt_text) and mode == "高保真视觉复刻" and "不换其他音乐" not in prompt_text:
                 errors.append(f"{clip_id} prompt must say 不换其他音乐 when reference audio is attached")
         use_start = as_float(asset.get("use_start_seconds"), errors, f"{label}.use_start_seconds")
         use_end = as_float(asset.get("use_end_seconds"), errors, f"{label}.use_end_seconds")
@@ -804,14 +943,14 @@ def validate_contract(project: Path, contract: dict) -> dict:
         prompt_text = prompt_texts[str(clip_id)]
         if not isinstance(exact_text, str) or not exact_text:
             errors.append(f"{label}.exact_text is required")
-        elif exact_text not in prompt_text:
+        elif (stage != "pre-visual" or prompt_text) and exact_text not in prompt_text:
             errors.append(f"{label} exact text is missing from prompt: {exact_text}")
         if isinstance(exact_text, str) and exact_text:
             generic_no_text = re.search(r"(?:画面)?无(?:任何|可读)?文字|禁止(?:任何|可读)?文字", prompt_text)
             whitelist_exception = re.search(rf"除[^\n]{{0,20}}{re.escape(exact_text)}[^\n]{{0,20}}外", prompt_text)
             if generic_no_text and not whitelist_exception:
                 errors.append(f"{label} conflicts with a generic no-text prompt; add an explicit whitelist exception")
-        if requirement.get("manual_visual_verified") is not True:
+        if stage != "pre-visual" and requirement.get("manual_visual_verified") is not True:
             errors.append(f"{label} must set manual_visual_verified=true after inspecting the image")
 
     handoff = contract.get("aitable_handoff")
@@ -819,6 +958,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
         isinstance(brief_alignment, dict)
         and brief_alignment.get("ai_table_requested") is True
         and handoff is None
+        and not (schema_version == 5 and stage == "pre-visual")
     ):
         errors.append("AI table delivery was requested but aitable_handoff is missing")
     if handoff is not None:
@@ -1104,8 +1244,9 @@ def validate_contract(project: Path, contract: dict) -> dict:
             "logline", "conflict", "character_choice", "visible_consequence",
             "unexpected_turn", "setup_evidence", "product_role", "ending_payoff",
         )
-        if not isinstance(candidates, list) or len(candidates) < 5:
-            errors.append("creative_room.candidates must contain at least 5 genuinely different concepts")
+        minimum_candidates = 3 if schema_version == 5 else 5
+        if not isinstance(candidates, list) or len(candidates) < minimum_candidates:
+            errors.append(f"creative_room.candidates must contain at least {minimum_candidates} genuinely different concepts")
             candidates = []
         for index, candidate in enumerate(candidates):
             label = f"creative_room.candidates[{index}]"
@@ -1153,7 +1294,10 @@ def validate_contract(project: Path, contract: dict) -> dict:
         else:
             selected_scorecard = selected.get("scorecard", {})
             if selected_scorecard.get("total", 0) < 85:
-                errors.append("selected creative concept must score at least 85")
+                if schema_version == 5:
+                    warnings.append("creative score below 85; independent editorial evidence, not a self-score, controls schema5 approval")
+                else:
+                    errors.append("selected creative concept must score at least 85")
             if selected_scorecard.get("hard_vetoes"):
                 errors.append("selected creative concept cannot contain hard vetoes")
             for candidate_id, candidate in candidate_by_id.items():
@@ -1171,7 +1315,11 @@ def validate_contract(project: Path, contract: dict) -> dict:
         else:
             if table_read.get("passed") is not True:
                 errors.append("creative_room.table_read.passed must be true")
-            if table_read.get("product_removal_breaks_story") is not True:
+            if schema_version == 5:
+                for field in ("product_removal_observation", "commercial_relevance_evidence"):
+                    if not isinstance(table_read.get(field), str) or not table_read[field].strip():
+                        errors.append(f"table read needs concrete {field}, not a product-deletion checkbox")
+            elif table_read.get("product_removal_breaks_story") is not True:
                 errors.append("table read must confirm that removing the product breaks the story")
             if table_read.get("dialogue_read_aloud") is not True:
                 errors.append("table read must include dialogue read-aloud timing")
@@ -1204,6 +1352,7 @@ def validate_contract(project: Path, contract: dict) -> dict:
     return {
         "status": "ok" if not errors else "failed",
         "project": str(project),
+        "stage": stage,
         "schema_version": contract.get("schema_version"),
         "mode": mode,
         "clip_count": len(clips),
@@ -1239,7 +1388,7 @@ def validate_legacy(project: Path) -> dict:
     }
 
 
-def validate(project: Path, legacy: bool = False) -> dict:
+def validate(project: Path, legacy: bool = False, stage: str = "pre-generation") -> dict:
     contract_path = project / CONTRACT_FILE
     if not contract_path.is_file():
         if legacy:
@@ -1254,17 +1403,18 @@ def validate(project: Path, legacy: bool = False) -> dict:
     contract = load_json(contract_path, errors, CONTRACT_FILE)
     if errors:
         return {"status": "failed", "project": str(project), "errors": errors, "warnings": []}
-    return validate_contract(project, contract)
+    return validate_contract(project, contract, stage=stage)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate a yishufan replica package.")
     parser.add_argument("project_dir")
     parser.add_argument("--legacy", action="store_true", help="Use the old shallow checks when no contract exists")
+    parser.add_argument("--stage", choices=("pre-visual", "pre-generation", "pre-stitch", "pre-publish"), default="pre-generation")
     parser.add_argument("--report", help="Optional JSON report path")
     args = parser.parse_args()
     project = Path(args.project_dir).expanduser().resolve()
-    result = validate(project, legacy=args.legacy)
+    result = validate(project, legacy=args.legacy, stage=args.stage)
     report = Path(args.report).expanduser().resolve() if args.report else project / "07_package_validation.json"
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")

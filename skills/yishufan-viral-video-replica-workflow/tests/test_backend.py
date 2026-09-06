@@ -78,8 +78,17 @@ class AudioExtractionTests(unittest.TestCase):
 class PackageValidatorTests(unittest.TestCase):
     @staticmethod
     def write_fake_png(path: Path, width: int = 1080, height: int = 1920) -> None:
+        import zlib
+
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8 + struct.pack(">II", width, height))
+        def chunk(kind, data):
+            return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+        path.write_bytes(
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress((b"\x00" + b"\x00" * width) * height))
+            + chunk(b"IEND", b"")
+        )
 
     def build_project(self, project: Path) -> dict:
         files = {
@@ -121,13 +130,13 @@ class PackageValidatorTests(unittest.TestCase):
                 }
             ),
             "audio/ref_music.mp3": "audio",
-            "assets/product_front.png": "product-reference",
         }
         for relative, content in files.items():
             path = project / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
         for relative in (
+            "assets/product_front.png",
             "character/character_sheet.png",
             "storyboard/clip01_01.png",
             "storyboard/clip02_01_银泰中心扇面.png",
@@ -1091,6 +1100,70 @@ class TranscriptValidatorTests(unittest.TestCase):
         result = transcript_validator.validate_transcript(contract, manifest)
         self.assertEqual(result["status"], "ok", result["errors"])
 
+    def test_rejects_speech_that_only_grazes_canonical_window(self):
+        contract = {
+            "clips": [{"id": "clip02", "start_seconds": 15, "end_seconds": 30}],
+            "dialogue_requirements": [
+                {
+                    "id": "trial_benefit",
+                    "clip_id": "clip02",
+                    "match_mode": "exact",
+                    "expected_text": "多家品牌免费试吃",
+                    "speech_start_seconds": 16.5,
+                    "speech_end_seconds": 19.0,
+                }
+            ],
+        }
+        manifest = {
+            "clips": [
+                {
+                    "clip_id": "clip02",
+                    "segments": [
+                        {"start_seconds": 0.03, "end_seconds": 1.99, "text": "多家品牌免费试吃。"}
+                    ],
+                }
+            ]
+        }
+        result = transcript_validator.validate_transcript(contract, manifest)
+        self.assertEqual(result["status"], "failed")
+        self.assertTrue(any("dialogue timing failed" in error for error in result["errors"]))
+
+    def test_order_uses_estimated_time_after_merged_segment(self):
+        contract = {
+            "clips": [{"id": "clip01", "start_seconds": 0, "end_seconds": 15}],
+            "dialogue_requirements": [
+                {"id": "wait", "clip_id": "clip01", "match_mode": "exact",
+                 "expected_text": "等等", "speech_start_seconds": 0.15, "speech_end_seconds": 0.85},
+                {"id": "taste", "clip_id": "clip01", "match_mode": "exact",
+                 "expected_text": "先尝再说", "speech_start_seconds": 1.35, "speech_end_seconds": 2.65},
+                {"id": "choose", "clip_id": "clip01", "match_mode": "exact",
+                 "expected_text": "就选这家", "speech_start_seconds": 6.15, "speech_end_seconds": 7.4},
+            ],
+        }
+        manifest = {"clips": [{"clip_id": "clip01", "segments": [
+            {"start_seconds": 0.69, "end_seconds": 3.55, "text": "等等，先尝再说。"},
+            {"start_seconds": 6.86, "end_seconds": 7.63, "text": "就选这家。"},
+        ]}]}
+        result = transcript_validator.validate_transcript(contract, manifest)
+        self.assertEqual(result["status"], "ok", result["errors"])
+
+    def test_reports_late_exact_line_as_timing_failure(self):
+        contract = {
+            "clips": [{"id": "clip02", "start_seconds": 15, "end_seconds": 30}],
+            "dialogue_requirements": [
+                {"id": "choice", "clip_id": "clip02", "match_mode": "exact",
+                 "expected_text": "这下更难选了", "speech_start_seconds": 20.2,
+                 "speech_end_seconds": 22.1}
+            ],
+        }
+        manifest = {"clips": [{"clip_id": "clip02", "segments": [
+            {"start_seconds": 7.94, "end_seconds": 10.03, "text": "这下更难选了。"}
+        ]}]}
+        result = transcript_validator.validate_transcript(contract, manifest)
+        self.assertEqual(result["status"], "failed")
+        self.assertTrue(any("dialogue timing failed" in error for error in result["errors"]))
+        self.assertFalse(any("dialogue requirement failed" in error for error in result["errors"]))
+
     def test_uses_clip_relative_asr_time_for_later_clip(self):
         contract = {
             "clips": [
@@ -1357,12 +1430,13 @@ class QualityGateTests(unittest.TestCase):
             self.assertEqual(result["decision"], "block_generation")
             self.assertEqual(result["return_to_stage"], "brief")
 
-    def test_allows_valid_pre_generation_package(self):
+    def test_valid_legacy_package_is_audit_only(self):
         with tempfile.TemporaryDirectory() as temp:
             project = Path(temp)
             PackageValidatorTests().build_project(project)
-            result = quality_gate.run_gate(project, "pre-generation")
-            self.assertEqual(result["decision"], "allow_generation", result["errors"])
+            result = quality_gate.run_gate(project, "pre-generation", audit_legacy=True)
+            self.assertEqual(result["decision"], "audit_only", result["errors"])
+            self.assertFalse(result["production_authorized"])
 
     def test_routes_dialogue_failure_back_to_dialogue_prompt(self):
         errors = ["transcript: opening dialogue requirement failed in clip01; ASR normalized text []"]

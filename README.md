@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <code>v6.1</code> · <code>41 个正式案例</code> · <code>350 份案例文档</code> · <code>2048 维本地向量</code> · <code>67 项测试</code>
+  <code>v7.3</code> · <code>41 个正式案例</code> · <code>350 份案例文档</code> · <code>2048 维本地向量</code> · <code>170 项测试</code>
 </p>
 
 <p align="center">
@@ -38,6 +38,8 @@ Rxx 原片节拍 → Sxx 新片脚本 → Bxx 分镜 → Pxx 生成提示词
         ↓
 生成前 / 合片前 / 发布前质量门禁
 ```
+
+V7.3 将创作收敛到一份 `03_director_plan.json`：每个节拍必须写清前因、可见动作、新信息、镜头目的和转场触发；人物左右手、道具、位置、视线、动作阶段及群众状态必须跨镜头连续。同一动作只能兑现一次，每个 15 秒片段默认不超过 3 个节拍和 2 个有声回合。它重点解决脚本散、镜头堆叠、跨段重演和故事突然跳转的问题。
 
 ## 两种入口，一套工作流
 
@@ -184,7 +186,14 @@ python3 "$SKILL_DIR/scripts/configure_asr.py" --check
 
 ## 30 秒安装
 
-### 方式 A：GitHub CLI（推荐）
+### 方式 A：Skills CLI（推荐）
+
+```bash
+npx skills add 784697524-ux/yishufan-viral-video-replica-workflow \
+  --agent codex -g -y
+```
+
+### 方式 B：GitHub CLI
 
 需要支持 `gh skill` 的新版 GitHub CLI：
 
@@ -195,7 +204,7 @@ gh skill install 784697524-ux/yishufan-viral-video-replica-workflow \
   --scope user
 ```
 
-### 方式 B：手动安装到 Codex
+### 方式 C：手动安装到 Codex
 
 ```bash
 git clone https://github.com/784697524-ux/yishufan-viral-video-replica-workflow.git
@@ -336,7 +345,7 @@ python3 "$SKILL_DIR/scripts/viral_library.py" build \
     ├── vendor/watch/                      便携拉片与字幕识别后端
     ├── references/                        合同与质量规范
     ├── templates/                         调用与质检模板
-    └── tests/                             67 项回归测试
+    └── tests/                             170 项回归测试
 ```
 
 ## 验证开发版本
@@ -347,13 +356,14 @@ python3 -m unittest discover -s tests -v
 sqlite3 knowledge_base/index.sqlite3 "PRAGMA integrity_check;"
 ```
 
-当前 v6.1 的 `67` 项测试全部通过；案例库 `PRAGMA integrity_check` 返回 `ok`。
+当前 v7.3 的 `170` 项测试全部通过；案例库 `PRAGMA integrity_check` 返回 `ok`。
 
 ## 继续阅读
 
 - [完整工作流入口](./skills/yishufan-viral-video-replica-workflow/SKILL.md)
 - [三种复刻模式](./skills/yishufan-viral-video-replica-workflow/references/三种复刻模式.md)
-- [复刻合同 schema v4](./skills/yishufan-viral-video-replica-workflow/references/replica_contract_schema.md)
+- [V7.3 导演核心](./skills/yishufan-viral-video-replica-workflow/references/director_core_v73.md)
+- [复刻合同 schema v5](./skills/yishufan-viral-video-replica-workflow/references/replica_contract_schema.md)
 - [质量门禁清单](./skills/yishufan-viral-video-replica-workflow/references/quality_gate_manifests.md)
 - [历史案例目录](./skills/yishufan-viral-video-replica-workflow/knowledge_base/catalog.md)
 
